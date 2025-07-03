@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  body {
+    @apply bg-background text-secondary font-body;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-medium;
+  }
+}
+
+@layer components {
+  .container {
+    @apply px-4 mx-auto max-w-7xl;
+  }
+  
+  .btn {
+    @apply px-6 py-3 font-medium transition-all duration-300 rounded-none;
+  }
+  
+  .btn-primary {
+    @apply bg-primary text-secondary hover:bg-primary-dark;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-cream hover:bg-secondary-light;
+  }
+}
