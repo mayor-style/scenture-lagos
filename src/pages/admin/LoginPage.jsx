@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/Card';
 import { Lock, User, LogIn } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { adminLogin, loading, error: authError } = useAuth();
+  
   const [formData, setFormData] = useState({
     email: '',
     password: '',
     rememberMe: false,
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
@@ -25,29 +28,21 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     setError('');
 
     try {
-      // In a real application, this would be an API call to authenticate
-      // For demo purposes, we'll simulate a successful login with a delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call the adminLogin function from AuthContext
+      await adminLogin({
+        email: formData.email,
+        password: formData.password
+      });
       
-      // Check credentials (in a real app, this would be done server-side)
-      if (formData.email === 'admin@scenture.com' && formData.password === 'password') {
-        // Store authentication token or user info in localStorage/sessionStorage
-        localStorage.setItem('isAuthenticated', 'true');
-        
-        // Redirect to admin dashboard
-        navigate('/admin/dashboard');
-      } else {
-        setError('Invalid email or password');
-      }
+      // Redirect to the intended page or dashboard
+      const redirectTo = location.state?.from?.pathname || '/admin/dashboard';
+      navigate(redirectTo);
     } catch (err) {
-      setError('An error occurred during login. Please try again.');
+      setError(err.response?.data?.message || 'Invalid email or password');
       console.error('Login error:', err);
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -76,9 +71,9 @@ const LoginPage = () => {
         
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && (
+            {(error || authError) && (
               <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">
-                {error}
+                {error || authError}
               </div>
             )}
             
@@ -153,9 +148,9 @@ const LoginPage = () => {
             <Button 
               type="submit" 
               className="w-full flex items-center justify-center" 
-              disabled={isLoading}
+              disabled={loading}
             >
-              {isLoading ? (
+              {loading ? (
                 <span className="flex items-center">
                   <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>

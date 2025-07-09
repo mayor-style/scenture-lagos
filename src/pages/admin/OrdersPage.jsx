@@ -1,139 +1,227 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { formatPrice } from '../../lib/utils';
+import { formatPrice, formatDate } from '../../lib/utils';
 import { 
   Search, 
   Filter, 
   Eye, 
+  Clock,
   ChevronLeft, 
   ChevronRight,
   Calendar,
-  Download
+  Download,
+  RefreshCw,
+  AlertCircle
 } from 'lucide-react';
+import OrderService from '../../services/admin/order.service';
+import { LoadingState, LoadingOverlay } from '../../components/ui/LoadingState';
+import  ErrorState  from '../../components/ui/ErrorState';
+import { toast } from 'react-hot-toast';
 
-// Sample data for demonstration
-const orders = [
-  { 
-    id: 'ORD-001', 
-    customer: 'John Doe', 
-    email: 'john.doe@example.com',
-    date: '2023-05-15', 
-    total: 12500, 
-    status: 'Delivered',
-    payment_status: 'Paid',
-    payment_method: 'Credit Card',
-    items: 2
-  },
-  { 
-    id: 'ORD-002', 
-    customer: 'Jane Smith', 
-    email: 'jane.smith@example.com',
-    date: '2023-05-14', 
-    total: 8700, 
-    status: 'Processing',
-    payment_status: 'Paid',
-    payment_method: 'PayPal',
-    items: 1
-  },
-  { 
-    id: 'ORD-003', 
-    customer: 'Robert Johnson', 
-    email: 'robert.j@example.com',
-    date: '2023-05-14', 
-    total: 5300, 
-    status: 'Pending',
-    payment_status: 'Pending',
-    payment_method: 'Bank Transfer',
-    items: 1
-  },
-  { 
-    id: 'ORD-004', 
-    customer: 'Emily Davis', 
-    email: 'emily.davis@example.com',
-    date: '2023-05-13', 
-    total: 15000, 
-    status: 'Shipped',
-    payment_status: 'Paid',
-    payment_method: 'Credit Card',
-    items: 3
-  },
-  { 
-    id: 'ORD-005', 
-    customer: 'Michael Brown', 
-    email: 'michael.b@example.com',
-    date: '2023-05-12', 
-    total: 3200, 
-    status: 'Delivered',
-    payment_status: 'Paid',
-    payment_method: 'PayPal',
-    items: 1
-  },
-  { 
-    id: 'ORD-006', 
-    customer: 'Sarah Wilson', 
-    email: 'sarah.w@example.com',
-    date: '2023-05-11', 
-    total: 9800, 
-    status: 'Cancelled',
-    payment_status: 'Refunded',
-    payment_method: 'Credit Card',
-    items: 2
-  },
-  { 
-    id: 'ORD-007', 
-    customer: 'David Miller', 
-    email: 'david.m@example.com',
-    date: '2023-05-10', 
-    total: 7500, 
-    status: 'Delivered',
-    payment_status: 'Paid',
-    payment_method: 'PayPal',
-    items: 1
-  },
-  { 
-    id: 'ORD-008', 
-    customer: 'Lisa Taylor', 
-    email: 'lisa.t@example.com',
-    date: '2023-05-09', 
-    total: 22000, 
-    status: 'Delivered',
-    payment_status: 'Paid',
-    payment_method: 'Credit Card',
-    items: 4
-  },
+// Order status options for filtering
+const ORDER_STATUS_OPTIONS = [
+  { value: '', label: 'All Status' },
+  { value: 'Pending', label: 'Pending' },
+  { value: 'Processing', label: 'Processing' },
+  { value: 'Shipped', label: 'Shipped' },
+  { value: 'Delivered', label: 'Delivered' },
+  { value: 'Cancelled', label: 'Cancelled' }
+];
+
+// Payment status options for filtering
+const PAYMENT_STATUS_OPTIONS = [
+  { value: '', label: 'All Payment Status' },
+  { value: 'Paid', label: 'Paid' },
+  { value: 'Pending', label: 'Pending' },
+  { value: 'Refunded', label: 'Refunded' },
+  { value: 'Failed', label: 'Failed' }
 ];
 
 const OrdersPage = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStatus, setSelectedStatus] = useState('');
-  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
-
-  // Filter orders based on search term, status, and payment status
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = 
-      order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = selectedStatus ? order.status === selectedStatus : true;
-    const matchesPaymentStatus = selectedPaymentStatus ? order.payment_status === selectedPaymentStatus : true;
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  
+  // State for orders data
+  const [orders, setOrders] = useState([]);
+  const [totalOrders, setTotalOrders] = useState(0);
+  const [isPolling, setIsPolling] = useState(false);
+const [pollingInterval, setPollingInterval] = useState(null);
+  
+  // State for filters and pagination
+  const [searchTerm, setSearchTerm] = useState(queryParams.get('search') || '');
+  const [selectedStatus, setSelectedStatus] = useState(queryParams.get('status') || '');
+  const [selectedPaymentStatus, setSelectedPaymentStatus] = useState(queryParams.get('payment_status') || '');
+  const [currentPage, setCurrentPage] = useState(parseInt(queryParams.get('page') || '1', 10));
+  const [itemsPerPage, setItemsPerPage] = useState(parseInt(queryParams.get('limit') || '10', 10));
+  
+  // State for loading and error handling
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
+  // Calculate total pages
+  const totalPages = Math.ceil(totalOrders / itemsPerPage);
+  
+// Update fetchOrders to include fallback data
+const fetchOrders = async () => {
+  setLoading(true);
+  setError(null);
+  
+  try {
+    const params = {
+      page: currentPage,
+      limit: itemsPerPage,
+      search: searchTerm || undefined,
+      status: selectedStatus || undefined,
+      payment_status: selectedPaymentStatus || undefined
+    };
     
-    return matchesSearch && matchesStatus && matchesPaymentStatus;
-  });
+    const searchParams = new URLSearchParams();
+    if (currentPage > 1) searchParams.set('page', currentPage.toString());
+    if (searchTerm) searchParams.set('search', searchTerm);
+    if (selectedStatus) searchParams.set('status', selectedStatus);
+    if (selectedPaymentStatus) searchParams.set('payment_status', selectedPaymentStatus);
+    if (itemsPerPage !== 10) searchParams.set('limit', itemsPerPage.toString());
+    
+    const newUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+    if (newUrl !== location.pathname + location.search) {
+      navigate(newUrl, { replace: true });
+    }
+    
+    const data = await OrderService.getOrders(params);
+    setOrders(data.orders || []);
+    setTotalOrders(data.total || 0);
+  } catch (err) {
+    console.error('Error fetching orders:', err);
+    setError(err.message || 'Failed to load orders');
+    if (process.env.NODE_ENV === 'development') {
+      setOrders([
+        {
+          id: 'SCL-20250707-0001',
+          customer: 'Aisha Okeke',
+          email: 'aisha@example.com',
+          date: '2025-07-06',
+          total: 18500,
+          status: 'Delivered',
+          payment_status: 'Paid'
+        },
+        {
+          id: 'SCL-20250707-0002',
+          customer: 'Chinedu Eze',
+          email: 'chinedu@example.com',
+          date: '2025-07-06',
+          total: 9200,
+          status: 'Processing',
+          payment_status: 'Pending'
+        }
+      ]);
+      setTotalOrders(2);
+    } else {
+      setOrders([]);
+      setTotalOrders(0);
+      toast.error(err.message || 'Failed to load orders');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // Pagination
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+// Add export functionality
+const handleExportOrders = () => {
+  if (!orders.length) {
+    toast.error('No orders to export');
+    return;
+  }
+  
+  const csvHeaders = [
+    'Order ID',
+    'Customer',
+    'Email',
+    'Date',
+    'Total',
+    'Status',
+    'Payment Status'
+  ];
+  
+  const csvRows = orders.map(order => [
+    order.id,
+    order.customer,
+    order.email,
+    formatDate(order.date),
+    formatPrice(order.total),
+    order.status,
+    order.payment_status
+  ]);
+  
+  const csvContent = [
+    csvHeaders.join(','),
+    ...csvRows.map(row => row.join(','))
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `orders-${new Date().toISOString().split('T')[0]}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
 
+
+  // Handle page change
   const handlePageChange = (pageNumber) => {
-    setCurrentPage(pageNumber);
+    if (pageNumber !== currentPage) {
+      setCurrentPage(pageNumber);
+    }
   };
+  
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+  };
+  
+  // Handle search form submission
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    setCurrentPage(1); // Reset to first page when searching
+    fetchOrders();
+  };
+  
+  // Handle status filter change
+  const handleStatusChange = (e) => {
+    setSelectedStatus(e.target.value);
+    setCurrentPage(1); // Reset to first page when filtering
+  };
+  
+  // Handle payment status filter change
+  const handlePaymentStatusChange = (e) => {
+    setSelectedPaymentStatus(e.target.value);
+    setCurrentPage(1); // Reset to first page when filtering
+  };
+  
+  // Handle refresh button click
+  const handleRefresh = () => {
+    fetchOrders();
+  };
+  
+  // Fetch orders when component mounts or when filters/pagination change
+  useEffect(() => {
+    fetchOrders();
+  }, [currentPage, itemsPerPage]);
+
+  // Add cleanup for polling
+useEffect(() => {
+  return () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+  };
+}, [pollingInterval]);
 
   return (
     <>
@@ -147,11 +235,58 @@ const OrdersPage = () => {
             <h1 className="text-3xl font-heading font-medium text-secondary">Orders</h1>
             <p className="text-secondary/70 mt-1">Manage customer orders</p>
           </div>
-          <div className="mt-4 md:mt-0">
-            <Button variant="outline" className="flex items-center">
-              <Download size={16} className="mr-2" />
-              Export Orders
+          <div className="mt-4 md:mt-0 flex space-x-2">
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleRefresh}
+              disabled={loading}
+              className="flex items-center"
+            >
+              <RefreshCw size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
+            <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportOrders}
+            disabled={loading || !orders.length}
+            className="flex items-center"
+          >
+            <Download size={16} className="mr-2" />
+            Export Orders
+          </Button>
+            <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              if (isPolling) {
+                clearInterval(pollingInterval);
+                setPollingInterval(null);
+                setIsPolling(false);
+                toast.success('Real-time updates disabled');
+              } else {
+                const interval = setInterval(() => fetchOrders(), 30000); // Poll every 30 seconds
+                setPollingInterval(interval);
+                setIsPolling(true);
+                toast.success('Real-time updates enabled');
+              }
+            }}
+            disabled={loading}
+            className="flex items-center"
+          >
+            {isPolling ? (
+              <>
+                <Clock size={16} className="mr-2 animate-pulse" />
+                Stop Real-Time
+              </>
+            ) : (
+              <>
+                <Clock size={16} className="mr-2" />
+                Start Real-Time
+              </>
+            )}
+          </Button>
           </div>
         </div>
 
@@ -162,16 +297,16 @@ const OrdersPage = () => {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
+              <form onSubmit={handleSearchSubmit} className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
                 <input
                   type="text"
                   placeholder="Search by order ID, customer name or email..."
                   className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={handleSearchChange}
                 />
-              </div>
+              </form>
               
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="relative">
@@ -179,14 +314,12 @@ const OrdersPage = () => {
                   <select
                     className="pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
                     value={selectedStatus}
-                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    onChange={handleStatusChange}
+                    disabled={loading}
                   >
-                    <option value="">All Status</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Processing">Processing</option>
-                    <option value="Shipped">Shipped</option>
-                    <option value="Delivered">Delivered</option>
-                    <option value="Cancelled">Cancelled</option>
+                    {ORDER_STATUS_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
                 
@@ -195,19 +328,25 @@ const OrdersPage = () => {
                   <select
                     className="pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
                     value={selectedPaymentStatus}
-                    onChange={(e) => setSelectedPaymentStatus(e.target.value)}
+                    onChange={handlePaymentStatusChange}
+                    disabled={loading}
                   >
-                    <option value="">All Payment Status</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Pending">Pending</option>
-                    <option value="Refunded">Refunded</option>
-                    <option value="Failed">Failed</option>
+                    {PAYMENT_STATUS_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {error && !loading && (
+              <ErrorState 
+                message={error} 
+                retryAction={fetchOrders} 
+              />
+            )}
+            
+            <LoadingOverlay loading={loading} className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200">
@@ -221,8 +360,8 @@ const OrdersPage = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {currentItems.length > 0 ? (
-                    currentItems.map((order) => (
+                  {orders.length > 0 ? (
+                    orders.map((order) => (
                       <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50">
                         <td className="p-3 pl-0 font-medium">{order.id}</td>
                         <td className="p-3">
@@ -232,7 +371,7 @@ const OrdersPage = () => {
                         <td className="p-3">
                           <div className="flex items-center">
                             <Calendar size={14} className="mr-1 text-slate-400" />
-                            {order.date}
+                            {formatDate(order.date)}
                           </div>
                         </td>
                         <td className="p-3">{formatPrice(order.total)}</td>
@@ -267,44 +406,127 @@ const OrdersPage = () => {
                   ) : (
                     <tr>
                       <td colSpan="7" className="p-3 text-center text-slate-500">
-                        No orders found matching your criteria
+                        {error ? (
+                          <div className="flex items-center justify-center">
+                            <AlertCircle size={16} className="mr-2 text-red-500" />
+                            Error loading orders
+                          </div>
+                        ) : loading ? (
+                          'Loading orders...'
+                        ) : (
+                          'No orders found matching your criteria'
+                        )}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
-            </div>
+            </LoadingOverlay>
 
             {/* Pagination */}
-            {filteredOrders.length > 0 && (
+            {totalOrders > 0 && (
               <div className="flex items-center justify-between mt-6">
                 <div className="text-sm text-slate-500">
-                  Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredOrders.length)} of {filteredOrders.length} orders
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalOrders)} of {totalOrders} orders
                 </div>
                 <div className="flex items-center space-x-2">
-                  <button
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
-                    className="p-2 rounded-md border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={currentPage === 1 || loading}
                   >
                     <ChevronLeft size={16} />
-                  </button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button
-                      key={page}
-                      onClick={() => handlePageChange(page)}
-                      className={`w-8 h-8 rounded-md ${currentPage === page ? 'bg-primary text-secondary' : 'border border-slate-200'}`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                  <button
+                  </Button>
+                  {totalPages <= 5 ? (
+                    // Show all pages if 5 or fewer
+                    Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(page)}
+                        disabled={loading}
+                      >
+                        {page}
+                      </Button>
+                    ))
+                  ) : (
+                    // Show limited pages with ellipsis for many pages
+                    <>
+                      {/* First page */}
+                      <Button
+                        variant={currentPage === 1 ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(1)}
+                        disabled={loading}
+                      >
+                        1
+                      </Button>
+                      
+                      {/* Ellipsis or second page */}
+                      {currentPage > 3 && (
+                        <span className="px-2">...</span>
+                      )}
+                      
+                      {/* Pages around current page */}
+                      {Array.from(
+                        { length: Math.min(3, totalPages) },
+                        (_, i) => {
+                          let pageNum;
+                          if (currentPage <= 2) {
+                            // Near start
+                            pageNum = i + 2;
+                          } else if (currentPage >= totalPages - 1) {
+                            // Near end
+                            pageNum = totalPages - 3 + i;
+                          } else {
+                            // Middle
+                            pageNum = currentPage - 1 + i;
+                          }
+                          
+                          // Only show if within range
+                          if (pageNum > 1 && pageNum < totalPages) {
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={currentPage === pageNum ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => handlePageChange(pageNum)}
+                                disabled={loading}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          }
+                          return null;
+                        }
+                      ).filter(Boolean)}
+                      
+                      {/* Ellipsis or second-to-last page */}
+                      {currentPage < totalPages - 2 && (
+                        <span className="px-2">...</span>
+                      )}
+                      
+                      {/* Last page */}
+                      <Button
+                        variant={currentPage === totalPages ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(totalPages)}
+                        disabled={loading}
+                      >
+                        {totalPages}
+                      </Button>
+                    </>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
-                    className="p-2 rounded-md border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={currentPage === totalPages || loading}
                   >
                     <ChevronRight size={16} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

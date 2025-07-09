@@ -2,11 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X, ShoppingBag, User, Search } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { useCart } from '../../contexts/CartContext';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
+  const { cart } = useCart();
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
@@ -40,6 +42,9 @@ const Header = () => {
     { path: '/about', label: 'About' },
     { path: '/contact', label: 'Contact' },
   ];
+
+  // Get cart item count
+  const cartItemCount = cart?.totalItems || 0;
 
   return (
     <header 
@@ -103,7 +108,7 @@ const Header = () => {
             >
               <ShoppingBag size={20} className="group-hover:scale-110 transition-transform duration-200" />
               <span className="absolute -top-1 -right-1 bg-gray-900 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-medium shadow-lg">
-                0
+                {cartItemCount}
               </span>
             </Link>
           </div>
@@ -117,7 +122,7 @@ const Header = () => {
             >
               <ShoppingBag size={20} />
               <span className="absolute -top-1 -right-1 bg-gray-900 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-medium shadow-lg">
-                0
+                {cartItemCount}
               </span>
             </Link>
             

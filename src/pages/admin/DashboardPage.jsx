@@ -1,232 +1,871 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { formatPrice } from '../../lib/utils';
+import { formatPrice, formatDate } from '../../lib/utils';
 import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  LineChart,
-  Line
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { 
-  Package, 
-  ShoppingCart, 
-  DollarSign, 
-  Users, 
-  TrendingUp, 
-  Clock,
-  Plus
+  Package, ShoppingCart, DollarSign, Users, TrendingUp, Clock, Plus, RefreshCw, Calendar, Loader2, Bell
 } from 'lucide-react';
-
-// Sample data for demonstration
-const salesData = [
-  { name: 'Mon', sales: 4000 },
-  { name: 'Tue', sales: 3000 },
-  { name: 'Wed', sales: 5000 },
-  { name: 'Thu', sales: 2780 },
-  { name: 'Fri', sales: 1890 },
-  { name: 'Sat', sales: 6390 },
-  { name: 'Sun', sales: 3490 },
-];
-
-const recentOrders = [
-  { id: 'ORD-001', customer: 'John Doe', date: '2023-05-15', total: 12500, status: 'Delivered' },
-  { id: 'ORD-002', customer: 'Jane Smith', date: '2023-05-14', total: 8700, status: 'Processing' },
-  { id: 'ORD-003', customer: 'Robert Johnson', date: '2023-05-14', total: 5300, status: 'Pending' },
-  { id: 'ORD-004', customer: 'Emily Davis', date: '2023-05-13', total: 15000, status: 'Shipped' },
-  { id: 'ORD-005', customer: 'Michael Brown', date: '2023-05-12', total: 3200, status: 'Delivered' },
-];
+import { useNavigate } from 'react-router-dom';
+import DashboardService from '../../services/admin/dashboard.service';
+import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
+import ErrorState from '../../components/ui/ErrorState';
+import { toast } from 'react-hot-toast';
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
+
+  // State for dashboard data
+  const [summary, setSummary] = useState({
+    totalSales: 0,
+    totalOrders: 0,
+    inventoryValue: 0,
+    newCustomers: 0,
+    salesGrowth: 0,
+    ordersGrowth: 0,
+    customersGrowth: 0,
+    lowStockProducts: 0, // ADDED: To display low stock products
+    lastUpdated: ''
+  });
+  const [salesData, setSalesData] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [activityFeed, setActivityFeed] = useState([]);
+  const [filteredActivityFeed, setFilteredActivityFeed] = useState([]);
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [isPolling, setIsPolling] = useState(false);
+const [pollingInterval, setPollingInterval] = useState(null);
+  
+  // Loading and error states
+  const [loading, setLoading] = useState(true);
+  const [salesLoading, setSalesLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [activityLoading, setActivityLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [salesPeriod, setSalesPeriod] = useState('week');
+  
+  // Fetch summary data
+  const fetchSummaryData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await DashboardService.getDashboardSummary();
+      
+      if (response && response.data) {
+        const { metrics } = response.data;
+        setSummary({
+          totalSales: metrics.totalSales || 0,
+          totalOrders: metrics.totalOrders || 0,
+          inventoryValue: metrics.inventoryValue || 0,
+          newCustomers: metrics.newCustomers || 0,
+          salesGrowth: metrics.salesGrowth || 0, // MODIFIED: Use backend-provided growth
+          ordersGrowth: metrics.ordersGrowth || 0,
+          customersGrowth: metrics.customersGrowth || 0,
+          lowStockProducts: metrics.lowStockProducts || 0, // ADDED
+          lastUpdated: new Date().toISOString()
+        });
+      }
+      
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching summary data:', err.response?.status || err.message);
+      setError(err);
+      setLoading(false);
+      
+      // Updated fallback data for fragrances context
+      if (process.env.NODE_ENV === 'development') {
+        setSummary({
+          totalSales: 250000, // Updated to reflect realistic fragrance sales
+          totalOrders: 65,
+          inventoryValue: 500000,
+          newCustomers: 25,
+          salesGrowth: 8.7,
+          ordersGrowth: 5.4,
+          customersGrowth: 10.2,
+          lowStockProducts: 3, // ADDED
+          lastUpdated: new Date().toISOString()
+        });
+      }
+    }
+  };
+  
+  // Fetch sales data for chart
+  const fetchSalesData = async (period = 'week', startDate, endDate) => {
+    setSalesLoading(true);
+    
+    try {
+      const salesResponse = await DashboardService.getSalesData({ period, startDate, endDate });
+      
+      if (salesResponse && Array.isArray(salesResponse.data)) {
+        setSalesData(salesResponse.data);
+      } else {
+        setSalesData([]);
+      }
+      
+      setSalesLoading(false);
+    } catch (err) {
+      console.error('Error fetching sales data:', err.response?.status || err.message);
+      setSalesLoading(false);
+      
+      // Updated fallback data for fragrances context
+      if (process.env.NODE_ENV === 'development') {
+        const sampleData = [
+          { name: 'Mon', sales: 12000 }, // Updated to reflect fragrance sales
+          { name: 'Tue', sales: 9500 },
+          { name: 'Wed', sales: 15000 },
+          { name: 'Thu', sales: 8000 },
+          { name: 'Fri', sales: 11000 },
+          { name: 'Sat', sales: 18000 },
+          { name: 'Sun', sales: 13000 },
+        ];
+        setSalesData(sampleData);
+      }
+    }
+  };
+  
+  // Fetch recent orders
+  const fetchRecentOrders = async () => {
+    setOrdersLoading(true);
+    
+    try {
+      const response = await DashboardService.getRecentOrders({ limit: 5 });
+      
+      if (response && response.data && response.data.orders) {
+        const formattedOrders = response.data.orders.map(order => ({
+          id: order.orderNumber,
+          customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
+          date: order.createdAt,
+          total: order.totalAmount,
+          status: order.status
+        }));
+        setRecentOrders(formattedOrders);
+      } else {
+        setRecentOrders([]);
+      }
+      
+      setOrdersLoading(false);
+    } catch (err) {
+      console.error('Error fetching recent orders:', err.response?.status || err.message);
+      setOrdersLoading(false);
+      
+      // Updated fallback data for fragrances context
+      if (process.env.NODE_ENV === 'development') {
+        const sampleOrders = [
+          { id: 'SCL-20250707-0001', customer: 'Aisha Okeke', date: '2025-07-06', total: 18500, status: 'Delivered' },
+          { id: 'SCL-20250707-0002', customer: 'Chinedu Eze', date: '2025-07-06', total: 9200, status: 'Processing' },
+          { id: 'SCL-20250707-0003', customer: 'Fatima Bello', date: '2025-07-05', total: 6700, status: 'Pending' },
+          { id: 'SCL-20250707-0004', customer: 'Tunde Adebayo', date: '2025-07-05', total: 22000, status: 'Shipped' },
+          { id: 'SCL-20250707-0005', customer: 'Ngozi Obi', date: '2025-07-04', total: 4500, status: 'Delivered' },
+        ];
+        setRecentOrders(sampleOrders);
+      }
+    }
+  };
+  
+  // Fetch activity feed
+  const fetchActivityFeed = async () => {
+    setActivityLoading(true);
+    
+    try {
+    const response = await DashboardService.getActivityFeed({ limit: 10, type: activityFilter });
+    if (response && response.data && response.data.activities) {
+      const formattedActivities = response.data.activities.map(activity => ({
+        description: activity.message,
+        timestamp: activity.timestamp,
+        type: activity.type || 'general'
+      }));
+      setActivityFeed(formattedActivities);
+    } else {
+      setActivityFeed([]);
+    }
+    setActivityLoading(false);
+    } catch (err) {
+      console.error('Error fetching activity feed:', err.response?.status || err.message);
+      setActivityLoading(false);
+      
+      // Updated fallback data for fragrances context
+      if (process.env.NODE_ENV === 'development') {
+        const sampleActivities = [
+          { 
+            description: 'New product added: Rose Diffuser', 
+            timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+            type: 'product'
+          },
+          { 
+            description: 'Order #SCL-20250707-0006 status changed to Shipped', 
+            timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+            type: 'order'
+          },
+          { 
+            description: 'Inventory updated for Lavender Candle', 
+            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
+            type: 'inventory'
+          },
+          { 
+            description: 'New customer registered: Amaka Igwe', 
+            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
+            type: 'customer'
+          },
+          { 
+            description: 'Price updated for Oud Fragrance', 
+            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
+            type: 'product'
+          },
+        ];
+        setActivityFeed(sampleActivities);
+      }
+    }
+  };
+  
+  // Fetch all dashboard data with retry mechanism
+const fetchDashboardData = async (retryCount = 0) => {
+  const maxRetries = 3;
+  try {
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch (salesPeriod) {
+      case 'week':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'year':
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 7);
+    }
+    
+    const formattedStartDate = startDate.toISOString().split('T')[0];
+    const formattedEndDate = endDate.toISOString().split('T')[0];
+    
+    await Promise.all([
+      fetchSummaryData(),
+      fetchSalesData(salesPeriod, formattedStartDate, formattedEndDate),
+      fetchRecentOrders(),
+      fetchActivityFeed()
+    ]);
+    
+    toast.success('Dashboard data refreshed');
+  } catch (err) {
+    if (retryCount < maxRetries) {
+      toast(`Retrying ${retryCount + 1} of ${maxRetries}...`, { icon: '🔄' });
+      setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
+    } else {
+      setError(err);
+      toast.error('Failed to refresh dashboard data');
+    }
+  }
+};
+  
+  // Handle sales period change
+  const handlePeriodChange = (period) => {
+    setSalesPeriod(period);
+    const endDate = new Date();
+    const startDate = new Date();
+    
+    switch (period) {
+      case 'week':
+        startDate.setDate(startDate.getDate() - 7);
+        break;
+      case 'month':
+        startDate.setMonth(startDate.getMonth() - 1);
+        break;
+      case 'year':
+        startDate.setFullYear(startDate.getFullYear() - 1);
+        break;
+      default:
+        startDate.setDate(startDate.getDate() - 7);
+    }
+    
+    const formattedStartDate = startDate.toISOString().split('T')[0];
+    const formattedEndDate = endDate.toISOString().split('T')[0];
+    fetchSalesData(period, formattedStartDate, formattedEndDate);
+  };
+  
+  // Filter activity feed
+  const filterActivityFeed = (activities, filterType) => {
+    if (!activities || !Array.isArray(activities) || activities.length === 0) return [];
+    if (filterType === 'all') return activities;
+    return activities.filter(activity => activity.type === filterType);
+  };
+
+  // Get activity counts
+  const getActivityCounts = (activities) => {
+    if (!Array.isArray(activities) || activities.length === 0) {
+      return { product: 0, order: 0, inventory: 0, customer: 0, general: 0 };
+    }
+
+    return activities.reduce((counts, activity) => {
+      const type = activity.type || 'general'; // MODIFIED: Handle undefined types
+      counts[type] = (counts[type] || 0) + 1;
+      return counts;
+    }, { product: 0, order: 0, inventory: 0, customer: 0, general: 0 });
+  };
+
+  // Update filtered activity feed
+  useEffect(() => {
+    setFilteredActivityFeed(activityFeed);
+  }, [activityFeed]);
+
+  // Fetch data on mount
+  useEffect(() => {
+   
+      fetchDashboardData();
+    
+  }, []);
+
+  // Clean up polling on component unmount
+useEffect(() => {
+  return () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+  };
+}, [pollingInterval]);
+
   return (
     <>
       <Helmet>
         <title>Dashboard | Scenture Lagos Admin</title>
       </Helmet>
       
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-3xl font-heading font-medium text-secondary">Dashboard</h1>
-            <p className="text-secondary/70 mt-1">Welcome back to your admin dashboard</p>
+      <div className="space-y-8 px-0">
+        <div className="flex flex-col space-y-6 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <h1 className="text-3xl sm:text-4xl font-heading font-light text-secondary tracking-tight">
+              Dashboard
+            </h1>
+            <p className="text-secondary/60 text-sm sm:text-base font-light">
+              Welcome back to your admin dashboard
+            </p>
           </div>
-          <div className="mt-4 md:mt-0 flex space-x-3">
-            <Button variant="default" className="flex items-center">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button 
+              variant="outline" 
+              className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm" 
+              onClick={() => fetchDashboardData()}
+              disabled={loading || salesLoading || ordersLoading || activityLoading}
+            >
+              {(loading || salesLoading || ordersLoading || activityLoading) ? (
+                <>
+                  <Loader2 size={16} className="mr-2 animate-spin" />
+                  <span className="text-sm font-medium">Refreshing...</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={16} className="mr-2" />
+                  <span className="text-sm font-medium">Refresh</span>
+                </>
+              )}
+            </Button>
+            <Button 
+              variant="default" 
+              className="flex items-center justify-center h-11 px-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all duration-200"
+              onClick={() => navigate('/admin/products/new')}
+            >
               <Plus size={16} className="mr-2" />
-              New Product
+              <span className="text-sm font-medium">New Product</span>
+            </Button>
+             <Button
+              variant="outline"
+              className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm"
+              onClick={() => {
+                if (isPolling) {
+                  clearInterval(pollingInterval);
+                  setPollingInterval(null);
+                  setIsPolling(false);
+                  toast.success('Real-time updates disabled');
+                } else {
+                  const interval = setInterval(() => fetchDashboardData(), 30000); // Poll every 30 seconds
+                  setPollingInterval(interval);
+                  setIsPolling(true);
+                  toast.success('Real-time updates enabled');
+                }
+              }}
+              disabled={loading || salesLoading || ordersLoading || activityLoading}
+            >
+              {isPolling ? (
+                <>
+                  <Clock size={16} className="mr-2 animate-pulse" />
+                  <span className="text-sm font-medium">Stop Real-Time</span>
+                </>
+              ) : (
+                <>
+                  <Clock size={16} className="mr-2" />
+                  <span className="text-sm font-medium">Start Real-Time</span>
+                </>
+              )}
             </Button>
           </div>
         </div>
 
-        {/* Overview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
-            <CardContent className="p-6">
+        {error && (
+          <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/50 rounded-2xl p-6">
+            <ErrorState 
+              title="Failed to load dashboard data" 
+              message="There was an error loading the dashboard data. Please try again or check your connection." 
+              onRetry={() => fetchDashboardData()}
+              className="py-0"
+            />
+          </div>
+        )}
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
+
+          <Card className="group hover:shadow-xl hover:shadow-red-500/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-red-50/50 backdrop-blur-sm rounded-xl">
+          <CardContent className="p-6 sm:p-8">
+            <LoadingOverlay loading={loading}>
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-secondary/70">Total Sales</p>
-                  <h3 className="text-2xl font-heading font-medium mt-1">{formatPrice(1250000)}</h3>
-                  <p className="text-xs text-green-600 flex items-center mt-1">
-                    <TrendingUp size={14} className="mr-1" /> +12.5% from last month
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Low Stock Alerts</p>
+                  <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.lowStockProducts}</h3>
+                  <p className="text-xs text-secondary/60 flex items-center">
+                    <Package size={14} className="mr-1.5" />
+                    Products below threshold
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
+                    onClick={() => navigate('/admin/inventory?filter=low-stock')}
+                  >
+                    View Low Stock
+                  </Button>
                 </div>
-                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                  <DollarSign size={20} className="text-secondary" />
+                <div className="w-14 h-14 bg-gradient-to-br from-red-500/20 to-red-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                  <Package size={24} className="text-red-600" />
                 </div>
               </div>
+            </LoadingOverlay>
+          </CardContent>
+          </Card>
+
+          <Card className="group hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm rounded-xl">
+            <CardContent className="p-6 sm:p-8">
+              <LoadingOverlay loading={loading}>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Total Sales</p>
+                    <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{formatPrice(summary.totalSales)}</h3>
+                    <p className={`text-xs flex items-center ${summary.salesGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      <TrendingUp size={14} className="mr-1.5" /> 
+                      {summary.salesGrowth >= 0 ? '+' : ''}{summary.salesGrowth}% from last period
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                    <DollarSign size={24} className="text-primary" />
+                  </div>
+                </div>
+              </LoadingOverlay>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-secondary/70">Total Orders</p>
-                  <h3 className="text-2xl font-heading font-medium mt-1">156</h3>
-                  <p className="text-xs text-green-600 flex items-center mt-1">
-                    <TrendingUp size={14} className="mr-1" /> +8.2% from last month
-                  </p>
+          <Card className="group hover:shadow-xl hover:shadow-blue-500/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-blue-50/50 backdrop-blur-sm rounded-xl">
+            <CardContent className="p-6 sm:p-8">
+              <LoadingOverlay loading={loading}>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Total Orders</p>
+                    <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.totalOrders}</h3>
+                    <p className={`text-xs flex items-center ${summary.ordersGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      <TrendingUp size={14} className="mr-1.5" /> 
+                      {summary.ordersGrowth >= 0 ? '+' : ''}{summary.ordersGrowth}% from last period
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500/20 to-blue-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                    <ShoppingCart size={24} className="text-blue-600" />
+                  </div>
                 </div>
-                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                  <ShoppingCart size={20} className="text-secondary" />
-                </div>
-              </div>
+              </LoadingOverlay>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-secondary/70">Inventory Value</p>
-                  <h3 className="text-2xl font-heading font-medium mt-1">{formatPrice(3450000)}</h3>
-                  <p className="text-xs text-secondary/70 flex items-center mt-1">
-                    <Clock size={14} className="mr-1" /> Updated 2 hours ago
-                  </p>
+          <Card className="group hover:shadow-xl hover:shadow-purple-500/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-purple-50/50 backdrop-blur-sm rounded-xl">
+            <CardContent className="p-6 sm:p-8">
+              <LoadingOverlay loading={loading}>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Inventory Value</p>
+                    <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{formatPrice(summary.inventoryValue)}</h3>
+                    <p className="text-xs text-secondary/60 flex items-center">
+                      <Clock size={14} className="mr-1.5" /> 
+                      {summary.lastUpdated ? `Updated ${formatDate(summary.lastUpdated, { format: 'short' })}` : 'Recently updated'}
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-purple-500/20 to-purple-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                    <Package size={24} className="text-purple-600" />
+                  </div>
                 </div>
-                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                  <Package size={20} className="text-secondary" />
-                </div>
-              </div>
+              </LoadingOverlay>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-secondary/70">New Customers</p>
-                  <h3 className="text-2xl font-heading font-medium mt-1">24</h3>
-                  <p className="text-xs text-green-600 flex items-center mt-1">
-                    <TrendingUp size={14} className="mr-1" /> +4.6% from last week
-                  </p>
+          <Card className="group hover:shadow-xl hover:shadow-emerald-500/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-emerald-50/50 backdrop-blur-sm rounded-xl">
+            <CardContent className="p-6 sm:p-8">
+              <LoadingOverlay loading={loading}>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">New Customers</p>
+                    <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.newCustomers}</h3>
+                    <p className={`text-xs flex items-center ${summary.customersGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      <TrendingUp size={14} className="mr-1.5" /> 
+                      {summary.customersGrowth >= 0 ? '+' : ''}{summary.customersGrowth}% from last period
+                    </p>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-emerald-500/20 to-emerald-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                    <Users size={24} className="text-emerald-600" />
+                  </div>
                 </div>
-                <div className="w-12 h-12 bg-primary/20 rounded-full flex items-center justify-center">
-                  <Users size={20} className="text-secondary" />
-                </div>
-              </div>
+              </LoadingOverlay>
             </CardContent>
           </Card>
         </div>
 
-        {/* Quick Links */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="col-span-1 md:col-span-2">
-            <CardHeader>
-              <CardTitle>Sales Overview</CardTitle>
-              <CardDescription>Last 7 days sales performance</CardDescription>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
+          <Card className="col-span-1 lg:col-span-2 border-0 bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+            <CardHeader className="pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div className="space-y-1">
+                  <CardTitle className="text-xl font-heading font-medium text-secondary">Sales Overview</CardTitle>
+                  <CardDescription className="text-secondary/60">{salesLoading ? 'Loading...' : 'Sales performance over time'}</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`${salesPeriod === 'week' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                    onClick={() => handlePeriodChange('week')}
+                    disabled={salesLoading}
+                  >
+                    Week
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`${salesPeriod === 'month' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                    onClick={() => handlePeriodChange('month')}
+                    disabled={salesLoading}
+                  >
+                    Month
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className={`${salesPeriod === 'year' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                    onClick={() => handlePeriodChange('year')}
+                    disabled={salesLoading}
+                  >
+                    Year
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={salesData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f5f5f5" />
-                    <XAxis dataKey="name" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                    <Tooltip />
-                    <Bar dataKey="sales" fill="#E5D3C8" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <LoadingOverlay loading={salesLoading}>
+                <div className="h-80">
+                  {salesData && salesData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={salesData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                        <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                            border: 'none', 
+                            borderRadius: '12px',
+                            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                            backdropFilter: 'blur(10px)'
+                          }}
+                        />
+                        <Bar 
+                          dataKey="sales" 
+                          fill="url(#salesGradient)" 
+                          radius={[8, 8, 0, 0]}
+                        />
+                        <defs>
+                          <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#E5D3C8" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#E5D3C8" stopOpacity={0.2}/>
+                          </linearGradient>
+                        </defs>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <EmptyState 
+                        icon={<Calendar className="h-12 w-12 text-secondary/30" />}
+                        title="No sales data available"
+                        description="There is no sales data for the selected period."
+                      />
+                    </div>
+                  )}
+                </div>
+              </LoadingOverlay>
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Frequently used actions</CardDescription>
+          <Card className="border-0 bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl font-heading font-medium text-secondary">Quick Actions</CardTitle>
+              <CardDescription className="text-secondary/60">Frequently used actions</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <Button variant="default" className="w-full justify-start">
-                  <Plus size={16} className="mr-2" />
-                  Add New Product
+                <Button 
+                  variant="default" 
+                  className="w-full justify-start h-12 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-md hover:shadow-lg transition-all duration-200"
+                  onClick={() => navigate('/admin/products/new')}
+                >
+                  <Plus size={18} className="mr-3" />
+                  <span className="font-medium">Add New Product</span>
                 </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <ShoppingCart size={16} className="mr-2" />
-                  View Pending Orders
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-12 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
+                  onClick={() => navigate('/admin/orders?status=pending')}
+                >
+                  <ShoppingCart size={18} className="mr-3" />
+                  <span className="font-medium">View Pending Orders</span>
                 </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <Package size={16} className="mr-2" />
-                  Update Inventory
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-12 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
+                  onClick={() => navigate('/admin/inventory')}
+                >
+                  <Package size={18} className="mr-3" />
+                  <span className="font-medium">Update Inventory</span>
                 </Button>
-                <Button variant="outline" className="w-full justify-start">
-                  <Users size={16} className="mr-2" />
-                  View Customer List
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-start h-12 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
+                  onClick={() => navigate('/admin/customers')}
+                >
+                  <Users size={18} className="mr-3" />
+                  <span className="font-medium">View Customer List</span>
                 </Button>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Recent Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Orders</CardTitle>
-            <CardDescription>Latest customer orders</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium p-3 pl-0">Order ID</th>
-                    <th className="text-left font-medium p-3">Customer</th>
-                    <th className="text-left font-medium p-3">Date</th>
-                    <th className="text-left font-medium p-3">Amount</th>
-                    <th className="text-left font-medium p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentOrders.map((order) => (
-                    <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50">
-                      <td className="p-3 pl-0">{order.id}</td>
-                      <td className="p-3">{order.customer}</td>
-                      <td className="p-3">{order.date}</td>
-                      <td className="p-3">{formatPrice(order.total)}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
-                          order.status === 'Processing' ? 'bg-blue-100 text-blue-800' :
-                          order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-purple-100 text-purple-800'
-                        }`}>
-                          {order.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8">
+          <Card className="lg:col-span-2 border-0 bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+            <CardHeader className="flex flex-row items-center justify-between pb-4">
+              <div className="space-y-1">
+                <CardTitle className="text-xl font-heading font-medium text-secondary">Recent Orders</CardTitle>
+                <CardDescription className="text-secondary/60">{ordersLoading ? 'Loading...' : 'Latest customer orders'}</CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm"
+                className="border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
+                onClick={() => navigate('/admin/orders')}
+                disabled={ordersLoading}
+              >
+                <span className="font-medium">View All</span>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <LoadingOverlay loading={ordersLoading}>
+                <div className="overflow-x-auto">
+                  {recentOrders && recentOrders.length > 0 ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200/60">
+                          <th className="text-left font-semibold text-secondary/80 p-4 pl-0 tracking-wide">Order ID</th>
+                          <th className="text-left font-semibold text-secondary/80 p-4 tracking-wide">Customer</th>
+                          <th className="text-left font-semibold text-secondary/80 p-4 tracking-wide hidden sm:table-cell">Date</th>
+                          <th className="text-left font-semibold text-secondary/80 p-4 tracking-wide">Amount</th>
+                          <th className="text-left font-semibold text-secondary/80 p-4 tracking-wide">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recentOrders.map((order) => (
+                          <tr 
+                            key={order.id} 
+                            className="border-b border-slate-100/60 hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent cursor-pointer transition-all duration-200"
+                            onClick={() => navigate(`/admin/orders/${order.id}`)}
+                          >
+                            <td className="p-4 pl-0 font-medium text-secondary">{order.id}</td>
+                            <td className="p-4 text-secondary/80">{order.customer}</td>
+                            <td className="p-4 text-secondary/70 hidden sm:table-cell">{formatDate(order.date, { format: 'short' })}</td>
+                            <td className="p-4 font-semibold text-secondary">{formatPrice(order.total)}</td>
+                            <td className="p-4">
+                              <span className={`px-3 py-1.5 text-xs font-medium rounded-full ${
+                                order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' :
+                                order.status === 'Processing' ? 'bg-blue-100 text-blue-700' :
+                                order.status === 'Pending' ? 'bg-amber-100 text-amber-700' :
+                                'bg-purple-100 text-purple-700'
+                              }`}>{order.status}</span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="py-12 flex items-center justify-center">
+                      <EmptyState 
+                        icon={<ShoppingCart className="h-12 w-12 text-secondary/30" />}
+                        title="No recent orders"
+                        description="There are no recent orders to display."
+                      />
+                    </div>
+                  )}
+                </div>
+              </LoadingOverlay>
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl">
+            <CardHeader className="flex flex-row items-center justify-between pb-4">
+              <div className="space-y-1">
+                <CardTitle className="text-xl font-heading font-medium text-secondary">Activity Feed</CardTitle>
+                <CardDescription className="text-secondary/60">{activityLoading ? 'Loading...' : 'Recent system activities'}</CardDescription>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="hover:bg-secondary/5 transition-all duration-200"
+                disabled={activityLoading}
+                onClick={() => fetchActivityFeed()}
+              >
+                {activityLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-6 flex flex-wrap gap-2">
+                {(() => {
+                  const activityCounts = getActivityCounts(activityFeed);
+                  const totalCount = Object.values(activityCounts).reduce((sum, count) => sum + count, 0);
+                  
+                  return (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className={`${activityFilter === 'all' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                        onClick={() => setActivityFilter('all')}
+                        disabled={activityLoading}
+                      >
+                        All
+                        {totalCount > 0 && (
+                          <span className="ml-2 bg-primary/20 text-xs px-2 py-1 rounded-full">{totalCount}</span>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className={`${activityFilter === 'product' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                        onClick={() => setActivityFilter('product')}
+                        disabled={activityLoading}
+                      >
+                        <Package className="h-3 w-3 mr-1" />
+                        Products
+                        {activityCounts.product > 0 && (
+                          <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{activityCounts.product}</span>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className={`${activityFilter === 'order' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                        onClick={() => setActivityFilter('order')}
+                        disabled={activityLoading}
+                      >
+                        <ShoppingCart className="h-3 w-3 mr-1" />
+                        Orders
+                        {activityCounts.order > 0 && (
+                          <span className="ml-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full">{activityCounts.order}</span>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className={`${activityFilter === 'inventory' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                        onClick={() => setActivityFilter('inventory')}
+                        disabled={activityLoading}
+                      >
+                        <Package className="h-3 w-3 mr-1" />
+                        Inventory
+                        {activityCounts.inventory > 0 && (
+                          <span className="ml-2 bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">{activityCounts.inventory}</span>
+                        )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className={`${activityFilter === 'customer' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
+                        onClick={() => setActivityFilter('customer')}
+                        disabled={activityLoading}
+                      >
+                        <Users className="h-3 w-3 mr-1" />
+                        Customers
+                        {activityCounts.customer > 0 && (
+                          <span className="ml-2 bg-amber-100 text-amber-700 text-xs px-2 py-1 rounded-full">{activityCounts.customer}</span>
+                        )}
+                      </Button>
+                    </>
+                  );
+                })()} 
+              </div>
+              
+              <LoadingOverlay loading={activityLoading}>
+                {filteredActivityFeed && filteredActivityFeed.length > 0 ? (
+                  <div className="space-y-4">
+                    {filteredActivityFeed.map((activity, index) => (
+                      <div key={index} className="flex items-start space-x-4 p-3 rounded-xl hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent transition-all duration-200">
+                        <div className="flex-shrink-0 mt-1">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                            activity.type === 'product' ? 'bg-blue-100' :
+                            activity.type === 'order' ? 'bg-emerald-100' :
+                            activity.type === 'inventory' ? 'bg-purple-100' :
+                            activity.type === 'customer' ? 'bg-amber-100' :
+                            'bg-primary/10'
+                          }`}>
+                            {activity.type === 'product' ? (
+                              <Package className="h-5 w-5 text-blue-600" />
+                            ) : activity.type === 'order' ? (
+                              <ShoppingCart className="h-5 w-5 text-emerald-600" />
+                            ) : activity.type === 'inventory' ? (
+                              <Package className="h-5 w-5 text-purple-600" />
+                            ) : activity.type === 'customer' ? (
+                              <Users className="h-5 w-5 text-amber-600" />
+                            ) : (
+                              <Bell className="h-5 w-5 text-primary" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-secondary leading-relaxed">{activity.description}</p>
+                          <p className="text-xs text-secondary/60 mt-1">{formatDate(activity.timestamp, { format: 'short' })}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-12 flex items-center justify-center">
+                    <EmptyState 
+                      icon={<Bell className="h-12 w-12 text-secondary/30" />}
+                      title={activityFilter === 'all' ? "No recent activity" : `No ${activityFilter} activity`}
+                      description={activityFilter === 'all' ? "There is no recent activity to display." : `There is no ${activityFilter} activity to display.`}
+                    />
+                  </div>
+                )}
+              </LoadingOverlay>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </>
   );

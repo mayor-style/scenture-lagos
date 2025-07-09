@@ -33,7 +33,7 @@ const AdminLayout = () => {
         )}
       >
         <AdminHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-        <main className="flex-1 overflow-y-auto p-6">
+        <main className="flex-1 overflow-y-auto p-5 px-0">
           <div className="container mx-auto">
             <Outlet />
           </div>

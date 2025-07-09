@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { formatPrice } from '../../lib/utils';
+import { formatPrice, formatDate } from '../../lib/utils';
 import { 
   ArrowLeft, 
   Truck, 
@@ -17,162 +17,175 @@ import {
   Mail,
   FileText,
   Printer,
-  Send
+  Send,
+  AlertCircle,
+  Trash2
 } from 'lucide-react';
-
-// Sample order data for demonstration
-const sampleOrder = {
-  id: 'ORD-001',
-  date: '2023-05-15',
-  status: 'Processing',
-  payment_status: 'Paid',
-  payment_method: 'Credit Card',
-  payment_id: 'PAY-12345678',
-  total: 12500,
-  subtotal: 11000,
-  shipping: 1500,
-  tax: 0,
-  customer: {
-    id: 'CUST-001',
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '+234 812 345 6789',
-  },
-  shipping_address: {
-    street: '123 Victoria Island',
-    city: 'Lagos',
-    state: 'Lagos State',
-    country: 'Nigeria',
-    postal_code: '101233',
-  },
-  billing_address: {
-    street: '123 Victoria Island',
-    city: 'Lagos',
-    state: 'Lagos State',
-    country: 'Nigeria',
-    postal_code: '101233',
-  },
-  items: [
-    {
-      id: 1,
-      product_id: 'PROD-001',
-      name: 'Lavender Dreams Candle',
-      variant: '8oz',
-      price: 5500,
-      quantity: 1,
-      subtotal: 5500,
-    },
-    {
-      id: 2,
-      product_id: 'PROD-002',
-      name: 'Vanilla Bliss Room Spray',
-      variant: 'Standard',
-      price: 5500,
-      quantity: 1,
-      subtotal: 5500,
-    },
-  ],
-  timeline: [
-    {
-      id: 1,
-      date: '2023-05-15 14:30:00',
-      status: 'Order Placed',
-      description: 'Order was placed by customer',
-    },
-    {
-      id: 2,
-      date: '2023-05-15 14:35:00',
-      status: 'Payment Confirmed',
-      description: 'Payment was confirmed via Credit Card',
-    },
-    {
-      id: 3,
-      date: '2023-05-16 09:15:00',
-      status: 'Processing',
-      description: 'Order is being processed',
-    },
-  ],
-  notes: [
-    {
-      id: 1,
-      date: '2023-05-16 10:00:00',
-      author: 'Admin',
-      content: 'Customer requested gift wrapping for this order.',
-    },
-  ],
-};
+import OrderService from '../../services/admin/order.service';
+import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
+import ErrorState from '../../components/ui/ErrorState';
+import { toast } from 'react-hot-toast';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/Dialog';
 
 const OrderDetailPage = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [statusUpdate, setStatusUpdate] = useState('');
   const [note, setNote] = useState('');
-  
-  useEffect(() => {
-    // In a real app, you would fetch the order data from an API
-    // For now, we'll use the sample data
-    setOrder(sampleOrder);
-    setStatusUpdate(sampleOrder.status);
-    setLoading(false);
-  }, [id]);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
-  const handleStatusUpdate = () => {
-    // In a real app, you would update the order status via an API
-    if (statusUpdate && statusUpdate !== order.status) {
-      setOrder(prev => ({
-        ...prev,
-        status: statusUpdate,
-        timeline: [
-          ...prev.timeline,
-          {
-            id: prev.timeline.length + 1,
-            date: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            status: statusUpdate,
-            description: `Order status updated to ${statusUpdate}`,
-          },
-        ],
-      }));
+  const fetchOrder = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await OrderService.getOrder(id);
+      setOrder(response.order);
+      setStatusUpdate(response.order.status);
+    } catch (err) {
+      console.error('Error fetching order:', err);
+      setError(err.message || 'Failed to load order details');
+      toast.error(err.message || 'Failed to load order details');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddNote = () => {
-    // In a real app, you would add the note via an API
+  useEffect(() => {
+    fetchOrder();
+  }, [id]);
+
+  const handleStatusUpdate = async () => {
+    if (statusUpdate && statusUpdate !== order.status) {
+      try {
+        const response = await OrderService.updateOrderStatus(id, statusUpdate);
+        setOrder(response.order);
+        toast.success('Order status updated successfully');
+      } catch (err) {
+        console.error('Error updating status:', err);
+        toast.error(err.message || 'Failed to update order status');
+      }
+    }
+  };
+
+  const handleAddNote = async () => {
     if (note.trim()) {
-      setOrder(prev => ({
-        ...prev,
-        notes: [
-          ...prev.notes,
-          {
-            id: prev.notes.length + 1,
-            date: new Date().toISOString().replace('T', ' ').substring(0, 19),
-            author: 'Admin',
-            content: note.trim(),
-          },
-        ],
-      }));
-      setNote('');
+      try {
+        const response = await OrderService.addOrderNote(id, { content: note.trim() });
+        setOrder(response.order);
+        setNote('');
+        toast.success('Note added successfully');
+      } catch (err) {
+        console.error('Error adding note:', err);
+        toast.error(err.message || 'Failed to add note');
+      }
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    try {
+      const response = await OrderService.updateOrderStatus(id, 'cancelled');
+      setOrder(response.order);
+      setIsCancelDialogOpen(false);
+      toast.success('Order cancelled successfully');
+    } catch (err) {
+      console.error('Error cancelling order:', err);
+      toast.error(err.message || 'Failed to cancel order');
+    }
+  };
+
+  const handleRefund = async () => {
+    if (!refundAmount || !refundReason) {
+      toast.error('Please provide refund amount and reason');
+      return;
+    }
+    try {
+      const response = await OrderService.initiateRefund(id, {
+        amount: parseFloat(refundAmount),
+        reason: refundReason
+      });
+      setOrder(response.order);
+      setIsRefundDialogOpen(false);
+      setRefundAmount('');
+      setRefundReason('');
+      toast.success('Refund processed successfully');
+    } catch (err) {
+      console.error('Error processing refund:', err);
+      toast.error(err.message || 'Failed to process refund');
+    }
+  };
+
+  const handlePrintInvoice = () => {
+    const printContent = `
+      <html>
+        <head><title>Invoice ${order.id}</title></head>
+        <body>
+          <h1>Invoice ${order.id}</h1>
+          <p>Customer: ${order.customer.name}</p>
+          <p>Date: ${order.date}</p>
+          <h2>Items</h2>
+          <table border="1">
+            <tr><th>Product</th><th>Quantity</th><th>Price</th><th>Subtotal</th></tr>
+            ${order.items.map(item => `
+              <tr>
+                <td>${item.name} ${item.variant ? `(${item.variant})` : ''}</td>
+                <td>${item.quantity}</td>
+                <td>${formatPrice(item.price)}</td>
+                <td>${formatPrice(item.subtotal)}</td>
+              </tr>
+            `).join('')}
+          </table>
+          <p>Subtotal: ${formatPrice(order.subtotal)}</p>
+          <p>Shipping: ${formatPrice(order.shipping)}</p>
+          ${order.tax > 0 ? `<p>Tax: ${formatPrice(order.tax)}</p>` : ''}
+          <p><strong>Total: ${formatPrice(order.total)}</strong></p>
+        </body>
+      </html>
+    `;
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const handleSendEmail = async () => {
+    try {
+      const response = await OrderService.sendOrderEmail(id);
+      toast.success('Email sent successfully');
+    } catch (err) {
+      console.error('Error sending email:', err);
+      toast.error(err.message || 'Failed to send email');
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-secondary">Loading order details...</p>
+      <LoadingOverlay loading={loading}>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 text-primary animate-spin mx-auto" />
+            <p className="mt-4 text-secondary">Loading order details...</p>
+          </div>
         </div>
-      </div>
+      </LoadingOverlay>
     );
   }
 
-  if (!order) {
+  if (error || !order) {
     return (
       <div className="text-center py-12">
-        <h2 className="text-2xl font-heading font-medium text-secondary mb-2">Order Not Found</h2>
-        <p className="text-secondary/70 mb-6">The order you are looking for does not exist or has been removed.</p>
+        <ErrorState
+          title="Order Not Found"
+          message={error || 'The order you are looking for does not exist or has been removed.'}
+          retryAction={fetchOrder}
+        />
         <Link to="/admin/orders">
-          <Button variant="default">
+          <Button variant="default" className="mt-4">
             <ArrowLeft size={16} className="mr-2" />
             Back to Orders
           </Button>
@@ -188,6 +201,7 @@ const OrderDetailPage = () => {
       </Helmet>
       
       <div className="space-y-6">
+        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="flex items-center">
             <Link to="/admin/orders" className="mr-4">
@@ -201,7 +215,7 @@ const OrderDetailPage = () => {
               </h1>
               <div className="flex items-center mt-1 text-secondary/70">
                 <Calendar size={14} className="mr-1" />
-                <span>{order.date}</span>
+                <span>{formatDate(order.date)}</span>
                 <span className="mx-2">•</span>
                 <span className={`px-2 py-0.5 text-xs rounded-full ${
                   order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
@@ -216,11 +230,11 @@ const OrderDetailPage = () => {
             </div>
           </div>
           <div className="mt-4 md:mt-0 flex flex-wrap gap-3">
-            <Button variant="outline" className="flex items-center">
+            <Button variant="outline" onClick={handlePrintInvoice} className="flex items-center">
               <Printer size={16} className="mr-2" />
               Print Invoice
             </Button>
-            <Button variant="default" className="flex items-center">
+            <Button variant="default" onClick={handleSendEmail} className="flex items-center">
               <Send size={16} className="mr-2" />
               Send Email
             </Button>
@@ -307,7 +321,7 @@ const OrderDetailPage = () => {
                       <div className="flex-1 pb-4">
                         <div className="flex items-center justify-between">
                           <h4 className="text-sm font-medium text-secondary">{event.status}</h4>
-                          <span className="text-xs text-slate-500">{event.date}</span>
+                          <span className="text-xs text-slate-500">{formatDate(event.date)}</span>
                         </div>
                         <p className="mt-1 text-sm text-slate-600">{event.description}</p>
                       </div>
@@ -329,14 +343,18 @@ const OrderDetailPage = () => {
                     order.notes.map((noteItem) => (
                       <div key={noteItem.id} className="bg-slate-50 p-4 rounded-md">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-secondary">{noteItem.author}</span>
-                          <span className="text-xs text-slate-500">{noteItem.date}</span>
+                          <span className="font-medium text-secondary">{noteItem.createdBy?.firstName || 'Admin'}</span>
+                          <span className="text-xs text-slate-500">{formatDate(noteItem.date)}</span>
                         </div>
                         <p className="text-sm text-slate-600">{noteItem.content}</p>
                       </div>
                     ))
                   ) : (
-                    <p className="text-slate-500 text-center py-4">No notes added yet</p>
+                    <EmptyState
+                      icon={<FileText className="h-12 w-12 text-secondary/30" />}
+                      title="No Notes"
+                      description="No notes have been added to this order yet."
+                    />
                   )}
                 </div>
                 
@@ -350,7 +368,7 @@ const OrderDetailPage = () => {
                   />
                   <Button 
                     onClick={handleAddNote} 
-                    disabled={!note.trim()}
+                    disabled={!note.trim() || loading}
                     className="w-full"
                   >
                     Add Note
@@ -378,6 +396,7 @@ const OrderDetailPage = () => {
                       value={statusUpdate}
                       onChange={(e) => setStatusUpdate(e.target.value)}
                       className="flex-1 px-4 py-2 border border-slate-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+                      disabled={loading}
                     >
                       <option value="Pending">Pending</option>
                       <option value="Processing">Processing</option>
@@ -387,7 +406,7 @@ const OrderDetailPage = () => {
                     </select>
                     <Button 
                       onClick={handleStatusUpdate} 
-                      disabled={statusUpdate === order.status}
+                      disabled={statusUpdate === order.status || loading}
                       className="rounded-l-none"
                     >
                       Update
@@ -396,8 +415,26 @@ const OrderDetailPage = () => {
                 </div>
                 
                 <div className="pt-2">
-                  <Button variant="outline" className="w-full justify-start text-red-600 hover:bg-red-50 hover:border-red-200">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-red-600 hover:bg-red-50 hover:border-red-200"
+                    onClick={() => setIsCancelDialogOpen(true)}
+                    disabled={order.status === 'Cancelled' || loading}
+                  >
+                    <Trash2 size={16} className="mr-2" />
                     Cancel Order
+                  </Button>
+                </div>
+                
+                <div className="pt-2">
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start text-blue-600 hover:bg-blue-50 hover:border-blue-200"
+                    onClick={() => setIsRefundDialogOpen(true)}
+                    disabled={order.payment_status !== 'Paid' || order.status === 'Refunded' || loading}
+                  >
+                    <CreditCard size={16} className="mr-2" />
+                    Process Refund
                   </Button>
                 </div>
               </CardContent>
@@ -424,7 +461,7 @@ const OrderDetailPage = () => {
                   </div>
                   <div className="flex items-start">
                     <Phone size={16} className="mr-2 mt-0.5 text-slate-400" />
-                    <div className="text-sm">{order.customer.phone}</div>
+                    <div className="text-sm">{order.customer.phone || 'N/A'}</div>
                   </div>
                   <div className="pt-2">
                     <Link to={`/admin/customers/${order.customer.id}`}>
@@ -461,7 +498,7 @@ const OrderDetailPage = () => {
                     <Truck size={16} className="mr-2 mt-0.5 text-slate-400" />
                     <div>
                       <div className="font-medium">Shipping Method</div>
-                      <div className="text-sm text-slate-600">Standard Delivery</div>
+                      <div className="text-sm text-slate-600">{order.shipping_method || 'Standard Delivery'}</div>
                     </div>
                   </div>
                 </div>
@@ -480,14 +517,14 @@ const OrderDetailPage = () => {
                     <CreditCard size={16} className="mr-2 mt-0.5 text-slate-400" />
                     <div>
                       <div className="font-medium">Payment Method</div>
-                      <div className="text-sm text-slate-600">{order.payment_method}</div>
+                      <div className="text-sm text-slate-600">{order.payment_method || 'N/A'}</div>
                     </div>
                   </div>
                   <div className="flex items-start">
                     <FileText size={16} className="mr-2 mt-0.5 text-slate-400" />
                     <div>
                       <div className="font-medium">Transaction ID</div>
-                      <div className="text-sm text-slate-600">{order.payment_id}</div>
+                      <div className="text-sm text-slate-600">{order.payment_id || 'N/A'}</div>
                     </div>
                   </div>
                   <div className="flex items-start">
@@ -511,6 +548,71 @@ const OrderDetailPage = () => {
             </Card>
           </div>
         </div>
+
+        {/* Refund Dialog */}
+        <Dialog open={isRefundDialogOpen} onOpenChange={setIsRefundDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Process Refund</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="refundAmount" className="block text-sm font-medium text-secondary">
+                  Refund Amount
+                </label>
+                <input
+                  id="refundAmount"
+                  type="number"
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  placeholder="Enter refund amount"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label htmlFor="refundReason" className="block text-sm font-medium text-secondary">
+                  Refund Reason
+                </label>
+                <textarea
+                  id="refundReason"
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="Enter reason for refund"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleRefund} disabled={!refundAmount || !refundReason}>
+                Process Refund
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Cancel Order Dialog */}
+        <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Cancel Order</DialogTitle>
+            </DialogHeader>
+            <p className="text-sm text-slate-600">
+              Are you sure you want to cancel order {order.id}? This action cannot be undone.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsCancelDialogOpen(false)}>
+                No, Keep Order
+              </Button>
+              <Button variant="destructive" onClick={handleCancelOrder}>
+                Yes, Cancel Order
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </>
   );

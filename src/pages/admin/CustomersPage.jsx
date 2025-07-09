@@ -1,79 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { Search, UserPlus, Filter, ChevronLeft, ChevronRight, User, Mail, Phone, Calendar, ShoppingBag } from 'lucide-react';
+import { Search, UserPlus, Filter, ChevronLeft, ChevronRight, User, Mail, Phone, Calendar, ShoppingBag, RefreshCw, AlertCircle } from 'lucide-react';
+import CustomerService from '../../services/admin/customer.service';
+import  { LoadingOverlay, LoadingState, } from '../../components/ui/LoadingState';
+import ErrorState from '../../components/ui/ErrorState';
+import toast from 'react-hot-toast';
 
-// Sample customer data for demonstration
-const sampleCustomers = [
-  {
-    id: 'CUST-001',
-    name: 'John Doe',
-    email: 'john.doe@example.com',
-    phone: '+234 812 345 6789',
-    created_at: '2023-01-15',
-    total_orders: 5,
-    total_spent: 75000,
-    last_order_date: '2023-05-10',
-    status: 'active',
-  },
-  {
-    id: 'CUST-002',
-    name: 'Sarah Johnson',
-    email: 'sarah.j@example.com',
-    phone: '+234 803 456 7890',
-    created_at: '2023-02-20',
-    total_orders: 3,
-    total_spent: 45000,
-    last_order_date: '2023-04-25',
-    status: 'active',
-  },
-  {
-    id: 'CUST-003',
-    name: 'Michael Adebayo',
-    email: 'michael.a@example.com',
-    phone: '+234 705 678 9012',
-    created_at: '2023-03-05',
-    total_orders: 1,
-    total_spent: 12500,
-    last_order_date: '2023-03-05',
-    status: 'active',
-  },
-  {
-    id: 'CUST-004',
-    name: 'Chioma Okafor',
-    email: 'chioma.o@example.com',
-    phone: '+234 908 765 4321',
-    created_at: '2023-03-12',
-    total_orders: 2,
-    total_spent: 28000,
-    last_order_date: '2023-05-01',
-    status: 'active',
-  },
-  {
-    id: 'CUST-005',
-    name: 'David Wilson',
-    email: 'david.w@example.com',
-    phone: '+234 814 567 8901',
-    created_at: '2023-04-18',
-    total_orders: 1,
-    total_spent: 15000,
-    last_order_date: '2023-04-18',
-    status: 'inactive',
-  },
-  {
-    id: 'CUST-006',
-    name: 'Amina Ibrahim',
-    email: 'amina.i@example.com',
-    phone: '+234 706 789 0123',
-    created_at: '2023-04-30',
-    total_orders: 4,
-    total_spent: 62000,
-    last_order_date: '2023-05-15',
-    status: 'active',
-  },
-];
+const CustomersPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Parse query parameters
+  const queryParams = new URLSearchParams(location.search);
+  const initialPage = parseInt(queryParams.get('page')) || 1;
+  const initialStatus = queryParams.get('status') || 'all';
+  const initialSearch = queryParams.get('search') || '';
+  
+  // State for customers
+  const [customers, setCustomers] = useState([]);
+  const [totalCustomers, setTotalCustomers] = useState(0);
+  
+  // State for filters and pagination
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [customersPerPage, setCustomersPerPage] = useState(10);
+  
+  // Loading and error states
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-NG', {
@@ -83,34 +41,72 @@ const formatCurrency = (amount) => {
   }).format(amount);
 };
 
-const CustomersPage = () => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const customersPerPage = 5;
-
-  // Filter customers based on search term and status filter
-  const filteredCustomers = sampleCustomers.filter(customer => {
-    const matchesSearch = 
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.id.toLowerCase().includes(searchTerm.toLowerCase());
+  // Update URL when filters change
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (currentPage > 1) params.set('page', currentPage);
+    if (statusFilter !== 'all') params.set('status', statusFilter);
+    if (searchTerm) params.set('search', searchTerm);
     
-    const matchesStatus = 
-      statusFilter === 'all' ||
-      customer.status === statusFilter;
+    const newUrl = `${location.pathname}?${params.toString()}`;
+    navigate(newUrl, { replace: true });
+  }, [currentPage, statusFilter, searchTerm, navigate, location.pathname]);
+  
+  // Fetch customers
+  const fetchCustomers = async () => {
+    setLoading(true);
+    setError(null);
     
-    return matchesSearch && matchesStatus;
-  });
-
-  // Pagination logic
-  const indexOfLastCustomer = currentPage * customersPerPage;
-  const indexOfFirstCustomer = indexOfLastCustomer - customersPerPage;
-  const currentCustomers = filteredCustomers.slice(indexOfFirstCustomer, indexOfLastCustomer);
-  const totalPages = Math.ceil(filteredCustomers.length / customersPerPage);
+    try {
+      // Prepare filter parameters
+      const params = {
+        page: currentPage,
+        limit: customersPerPage,
+        search: searchTerm,
+      };
+      
+      if (statusFilter !== 'all') {
+        params.status = statusFilter;
+      }
+      
+      // Fetch customers with filters
+      const response = await CustomerService.getAllCustomers(params);
+      setCustomers(response.data);
+      setTotalCustomers(response.total);
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching customers:', err);
+      setError(err);
+      setLoading(false);
+      
+      // Fallback to empty array if API fails
+      setCustomers([]);
+    }
+  };
+  
+  // Fetch data when component mounts or filters change
+  useEffect(() => {
+    fetchCustomers();
+  }, [currentPage, statusFilter, searchTerm, customersPerPage]);
+  
+  // Calculate total pages
+  const totalPages = Math.ceil(totalCustomers / customersPerPage);
 
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
+  };
+  
+  // Handle search with debounce
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    setCurrentPage(1); // Reset to first page on new search
+  };
+  
+  // Handle status filter change
+  const handleStatusChange = (e) => {
+    setStatusFilter(e.target.value);
+    setCurrentPage(1); // Reset to first page on filter change
   };
 
   return (
@@ -133,7 +129,7 @@ const CustomersPage = () => {
                 type="text"
                 placeholder="Search customers..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 className="pl-10 pr-4 py-2 border border-slate-200 rounded-md w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
@@ -141,13 +137,23 @@ const CustomersPage = () => {
             <div className="flex gap-3">
               <select
                 value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
+                onChange={handleStatusChange}
                 className="px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
               >
                 <option value="all">All Status</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
               </select>
+              
+              <Button 
+                variant="outline" 
+                className="flex items-center" 
+                onClick={fetchCustomers}
+                disabled={loading}
+              >
+                <RefreshCw size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
               
               <Button variant="default" className="flex items-center">
                 <UserPlus size={16} className="mr-2" />
@@ -156,30 +162,45 @@ const CustomersPage = () => {
             </div>
           </div>
         </div>
+        
+        {/* Loading and Error States */}
+        {loading && !error && (
+          <LoadingState fullPage={false} className="py-12" />
+        )}
+        
+        {error && (
+          <ErrorState 
+            title="Failed to load customers" 
+            message="There was an error loading the customers. Please try again." 
+            onRetry={fetchCustomers} 
+            className="py-12"
+          />
+        )}
 
         <Card>
           <CardHeader>
             <CardTitle>Customer List</CardTitle>
             <CardDescription>
-              {filteredCustomers.length} customers found
+              {totalCustomers} customers found
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium p-3 pl-0">Customer</th>
-                    <th className="text-left font-medium p-3">Contact</th>
-                    <th className="text-left font-medium p-3">Orders</th>
-                    <th className="text-left font-medium p-3">Total Spent</th>
-                    <th className="text-left font-medium p-3">Status</th>
-                    <th className="text-right font-medium p-3 pr-0">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {currentCustomers.length > 0 ? (
-                    currentCustomers.map((customer) => (
+            <LoadingOverlay loading={loading && !error}>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left font-medium p-3 pl-0">Customer</th>
+                      <th className="text-left font-medium p-3">Contact</th>
+                      <th className="text-left font-medium p-3">Orders</th>
+                      <th className="text-left font-medium p-3">Total Spent</th>
+                      <th className="text-left font-medium p-3">Status</th>
+                      <th className="text-right font-medium p-3 pr-0">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {customers.length > 0 ? (
+                      customers.map((customer) => (
                       <tr key={customer.id} className="border-b border-slate-100">
                         <td className="p-3 pl-0">
                           <div className="flex items-center">
@@ -236,46 +257,127 @@ const CustomersPage = () => {
                       </tr>
                     ))
                   ) : (
-                    <tr>
-                      <td colSpan="6" className="p-4 text-center text-slate-500">
-                        No customers found matching your criteria
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+                      <tr>
+                        <td colSpan="6" className="p-3 text-center text-slate-500">
+                          {error ? (
+                            <div className="flex items-center justify-center">
+                              <AlertCircle size={16} className="mr-2 text-red-500" />
+                              Error loading customers
+                            </div>
+                          ) : loading ? (
+                            'Loading customers...'
+                          ) : (
+                            'No customers found matching your criteria'
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </LoadingOverlay>
 
             {/* Pagination */}
-            {filteredCustomers.length > 0 && (
+            {totalCustomers > 0 && (
               <div className="flex items-center justify-between mt-6">
                 <div className="text-sm text-slate-500">
-                  Showing {indexOfFirstCustomer + 1} to {Math.min(indexOfLastCustomer, filteredCustomers.length)} of {filteredCustomers.length} customers
+                  Showing {(currentPage - 1) * customersPerPage + 1} to {Math.min(currentPage * customersPerPage, totalCustomers)} of {totalCustomers} customers
                 </div>
                 <div className="flex items-center space-x-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handlePageChange(currentPage - 1)}
-                    disabled={currentPage === 1}
+                    disabled={currentPage === 1 || loading}
                   >
                     <ChevronLeft size={16} />
                   </Button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <Button
-                      key={page}
-                      variant={currentPage === page ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => handlePageChange(page)}
-                    >
-                      {page}
-                    </Button>
-                  ))}
+                  {totalPages <= 5 ? (
+                    // Show all pages if 5 or fewer
+                    Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(page)}
+                        disabled={loading}
+                      >
+                        {page}
+                      </Button>
+                    ))
+                  ) : (
+                    // Show limited pages with ellipsis for many pages
+                    <>
+                      {/* First page */}
+                      <Button
+                        variant={currentPage === 1 ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(1)}
+                        disabled={loading}
+                      >
+                        1
+                      </Button>
+                      
+                      {/* Ellipsis or second page */}
+                      {currentPage > 3 && (
+                        <span className="px-2">...</span>
+                      )}
+                      
+                      {/* Pages around current page */}
+                      {Array.from(
+                        { length: Math.min(3, totalPages) },
+                        (_, i) => {
+                          let pageNum;
+                          if (currentPage <= 2) {
+                            // Near start
+                            pageNum = i + 2;
+                          } else if (currentPage >= totalPages - 1) {
+                            // Near end
+                            pageNum = totalPages - 3 + i;
+                          } else {
+                            // Middle
+                            pageNum = currentPage - 1 + i;
+                          }
+                          
+                          // Only show if within range
+                          if (pageNum > 1 && pageNum < totalPages) {
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={currentPage === pageNum ? 'default' : 'outline'}
+                                size="sm"
+                                onClick={() => handlePageChange(pageNum)}
+                                disabled={loading}
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          }
+                          return null;
+                        }
+                      ).filter(Boolean)}
+                      
+                      {/* Ellipsis or second-to-last page */}
+                      {currentPage < totalPages - 2 && (
+                        <span className="px-2">...</span>
+                      )}
+                      
+                      {/* Last page */}
+                      <Button
+                        variant={currentPage === totalPages ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => handlePageChange(totalPages)}
+                        disabled={loading}
+                      >
+                        {totalPages}
+                      </Button>
+                    </>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => handlePageChange(currentPage + 1)}
-                    disabled={currentPage === totalPages}
+                    disabled={currentPage === totalPages || loading}
                   >
                     <ChevronRight size={16} />
                   </Button>

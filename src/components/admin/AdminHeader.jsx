@@ -1,17 +1,21 @@
 import React from 'react';
-import { Menu, Bell, User, LogOut } from 'lucide-react';
+import { Menu, Bell, User, LogOut, Settings } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import { useAuth } from '../../contexts/AuthContext';
 
 const AdminHeader = ({ sidebarOpen, setSidebarOpen }) => {
   const navigate = useNavigate();
+  const { currentUser, logout } = useAuth();
   const [dropdownOpen, setDropdownOpen] = React.useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('isAuthenticated'); // Clear auth
-    toast.success('Logged out successfully');
-    navigate('/admin/login');
+  const handleLogout = async () => {
+    try {
+      await logout();
+      // Navigation is handled in the logout function
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (
@@ -45,6 +49,20 @@ const AdminHeader = ({ sidebarOpen, setSidebarOpen }) => {
             </button>
             {dropdownOpen && (
               <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-slate-200">
+                <div className="px-4 py-2 border-b border-slate-100">
+                  <p className="text-sm font-medium">{currentUser?.firstName} {currentUser?.lastName}</p>
+                  <p className="text-xs text-slate-500">{currentUser?.email}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    navigate('/admin/settings');
+                  }}
+                  className="flex items-center w-full px-4 py-2 text-sm text-left text-secondary hover:bg-[#D4A017]/10"
+                >
+                  <Settings size={16} className="mr-2" />
+                  Settings
+                </button>
                 <button
                   onClick={handleLogout}
                   className="flex items-center w-full px-4 py-2 text-sm text-left text-secondary hover:bg-[#D4A017]/10"

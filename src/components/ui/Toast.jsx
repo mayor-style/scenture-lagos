@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 
-const Toast = ({
+export const Toast = ({
   message,
   type = 'success', // 'success', 'error', 'warning', 'info'
   duration = 5000,
@@ -75,7 +75,6 @@ const Toast = ({
   );
 };
 
-export default Toast;
 
 // Toast Container Component
 export const ToastContainer = ({ toasts, removeToast }) => {

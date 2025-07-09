@@ -6,16 +6,21 @@ import { Button } from '../components/ui/Button';
 import ProductCard from '../components/product/ProductCard';
 import { products } from '../lib/mockData';
 import { formatPrice } from '../lib/utils';
-import {Helmet} from 'react-helmet-async';
+import { Helmet } from 'react-helmet-async';
+import { useCart } from '../contexts/CartContext';
+import ProductService from '../services/product.service';
 
 const ProductDetailPage = () => {
   const { id } = useParams();
+  const { addToCart } = useCart();
   const [product, setProduct] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [selectedTab, setSelectedTab] = useState('description');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
   // Enhanced animation variants
   const fadeInUp = {
@@ -39,19 +44,38 @@ const ProductDetailPage = () => {
     visible: { opacity: 1, x: 0, transition: { duration: 0.5, ease: "easeOut" } },
   };
 
-  // Find the product and related products
+  // Fetch product and related products from API
   useEffect(() => {
-    if (id) {
-      const foundProduct = products.find(p => p.id === id);
-      if (foundProduct) {
-        setProduct(foundProduct);
+    const fetchProduct = async () => {
+      setLoading(true);
+      try {
+        // For now, using mock data until API integration is complete
+        const foundProduct = products.find(p => p.id === id);
+        if (foundProduct) {
+          setProduct(foundProduct);
+          
+          // Find related products (same category, excluding current product)
+          const related = products
+            .filter(p => p.category === foundProduct.category && p.id !== id)
+            .slice(0, 4);
+          setRelatedProducts(related);
+        }
         
-        // Find related products (same category, excluding current product)
-        const related = products
-          .filter(p => p.category === foundProduct.category && p.id !== id)
-          .slice(0, 4);
-        setRelatedProducts(related);
+        // Uncomment when API is ready
+        // const productData = await ProductService.getProduct(id);
+        // setProduct(productData);
+        // const relatedData = await ProductService.getRelatedProducts(id);
+        // setRelatedProducts(relatedData.products);
+      } catch (err) {
+        console.error('Error fetching product:', err);
+        setError('Failed to load product. Please try again.');
+      } finally {
+        setLoading(false);
       }
+    };
+
+    if (id) {
+      fetchProduct();
     }
   }, [id]);
 
@@ -80,6 +104,11 @@ const ProductDetailPage = () => {
     setIsWishlisted(!isWishlisted);
   };
 
+  // Handle add to cart
+  const handleAddToCart = () => {
+    addToCart(product.id, quantity);
+  };
+
   // Mock product images
   const productImages = [
     product?.image,
@@ -87,7 +116,15 @@ const ProductDetailPage = () => {
     'https://images.unsplash.com/photo-1599446794254-16ca8daa4c48?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1170&q=80',
   ];
 
-  if (!product) {
+  if (loading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (error || !product) {
     return (
       <motion.div 
         initial="hidden"
@@ -102,7 +139,7 @@ const ProductDetailPage = () => {
           <div className="space-y-3">
             <h2 className="font-heading text-2xl text-gray-900">Product Not Found</h2>
             <p className="text-gray-600 text-sm leading-relaxed">
-              The product you're looking for doesn't exist or has been removed from our catalog.
+              {error || "The product you're looking for doesn't exist or has been removed from our catalog."}
             </p>
           </div>
           <Button asChild className="px-8 py-3 rounded-full">
@@ -347,7 +384,10 @@ const ProductDetailPage = () => {
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                <Button className="w-full py-4 text-base font-medium rounded-xl bg-black hover:bg-gray-800 text-white transition-all duration-200 shadow-lg hover:shadow-xl">
+                <Button 
+                  className="w-full py-4 text-base font-medium rounded-xl bg-black hover:bg-gray-800 text-white transition-all duration-200 shadow-lg hover:shadow-xl"
+                  onClick={handleAddToCart}
+                >
                   <ShoppingBag size={20} className="mr-3" />
                   Add to Cart • {formatPrice(product.price * quantity)}
                 </Button>

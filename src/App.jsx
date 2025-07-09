@@ -1,11 +1,15 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
+import { ToastProvider } from './components/ui/Toast';
+import { AuthProvider } from './contexts/AuthContext';
+import { CartProvider } from './contexts/CartContext';
 import Layout from './components/layout/Layout';
 import AdminLayout from './components/admin/AdminLayout';
 import NotFoundPage from './pages/NotFoundPage';
 import ScrollToTop from './components/ScrollToTop';
 import LoadingSpinner from './components/ui/LoadingSpinner';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Lazy-loaded components for performance
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -16,6 +20,7 @@ const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
+const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 
 // Admin pages
 const LoginPage = lazy(() => import('./pages/admin/LoginPage'));
@@ -50,14 +55,7 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// Protected Route Component
-const ProtectedRoute = ({ children }) => {
-  const isAuthenticated = localStorage.getItem('isAuthenticated') === 'true';
-  if (!isAuthenticated) {
-    return <Navigate to="/admin/login" replace />;
-  }
-  return children;
-};
+// Error Boundary Component remains unchanged
 
 const App = () => {
   return (
@@ -65,14 +63,17 @@ const App = () => {
       <Router>
         <ScrollToTop />
         <ErrorBoundary>
-          <Suspense
-            fallback={
-              <div className="min-h-screen flex items-center justify-center">
-                <LoadingSpinner size="lg" />
-              </div>
-            }
-          >
-            <Routes>
+          <ToastProvider>
+            <AuthProvider>
+              <CartProvider>
+                <Suspense
+                  fallback={
+                    <div className="min-h-screen flex items-center justify-center">
+                      <LoadingSpinner size="lg" />
+                    </div>
+                  }
+                >
+              <Routes>
               {/* Public routes wrapped in Layout */}
               <Route element={<Layout />}>
                 <Route path="/" element={<HomePage />} />
@@ -88,10 +89,12 @@ const App = () => {
 
               {/* Admin routes without Layout */}
               <Route path="/admin/login" element={<LoginPage />} />
+              <Route path="/unauthorized" element={<UnauthorizedPage />} />
+              
               <Route
                 path="/admin"
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRoles={['admin', 'superadmin']}>
                     <AdminLayout />
                   </ProtectedRoute>
                 }
@@ -99,6 +102,7 @@ const App = () => {
                 <Route index element={<Navigate to="/admin/dashboard" replace />} />
                 <Route path="dashboard" element={<DashboardPage />} />
                 <Route path="products" element={<ProductsPage />} />
+                <Route path="products/:id" element={<ProductFormPage />} />
                 <Route path="products/new" element={<ProductFormPage />} />
                 <Route path="products/:id/edit" element={<ProductFormPage />} />
                 <Route path="orders" element={<OrdersPage />} />
@@ -111,7 +115,10 @@ const App = () => {
 
               <Route path="*" element={<NotFoundPage />} />
             </Routes>
-          </Suspense>
+                </Suspense>
+              </CartProvider>
+            </AuthProvider>
+          </ToastProvider>
         </ErrorBoundary>
       </Router>
     </HelmetProvider>

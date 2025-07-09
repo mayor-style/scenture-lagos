@@ -4,83 +4,82 @@ import { ShoppingBag, Plus } from 'lucide-react';
 import { Card, CardContent, CardFooter } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { formatPrice } from '../../lib/utils';
+import { useCart } from '../../contexts/CartContext';
+import { toast } from 'react-hot-toast';
 
 const ProductCard = ({ product }) => {
-  return (
-    <Card className="overflow-hidden transition-all duration-700 hover:shadow-xl hover:shadow-slate-200/40 group border-slate-200/60 hover:border-slate-300 bg-white rounded-sm">
-      <Link to={`/product/${product.id}`} className="block relative">
-        <div className="relative aspect-square overflow-hidden bg-slate-100">
-          <img
-            src={product.image}
-            alt={product.name}
-            className="object-cover w-full h-full transition-all duration-700 group-hover:scale-[1.03] filter group-hover:brightness-[1.02]"
-          />
-          
-          {/* Sophisticated overlay gradients */}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/8 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-500"></div>
-          <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-black/5 opacity-0 group-hover:opacity-100 transition-all duration-700"></div>
-          
-          {/* Minimal corner accent */}
-          <div className="absolute top-4 right-4 w-2 h-2 bg-white/60 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100 backdrop-blur-sm"></div>
-        </div>
+  const { addToCart } = useCart();
 
-        {/* Subtle hover indicator */}
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+  const handleAddToCart = (e) => {
+    e.preventDefault();
+    addToCart(product.id, 1);
+    toast.success(`${product.name} added to cart`);
+  };
+
+  return (
+    <Card
+      className="overflow-hidden transition-all duration-300 hover:shadow-md hover:shadow-neutral-200/50 group border-neutral-200 hover:border-neutral-300 bg-white rounded-lg"
+      role="article"
+      aria-label={`Product card for ${product.name}`}
+    >
+      <Link to={`/product/${product.id}`} className="block relative" tabIndex={0}>
+        <div className="relative aspect-square overflow-hidden bg-neutral-100">
+          <img
+            src={`${product.image}?fm=webp`}
+            alt={`Image of ${product.name} fragrance`}
+            className="object-cover w-full h-full transition-all duration-300 group-hover:scale-[1.02] group-hover:brightness-105"
+            loading="lazy"
+          />
+          {/* Single subtle gradient overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        </div>
+        {/* Hover indicator */}
+        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
       </Link>
-      
-      <CardContent className="pt-8 pb-6 px-8">
-        <div className="space-y-4">
+
+      <CardContent className="pt-6 pb-4 px-6">
+        <div className="space-y-3">
           {/* Category Badge */}
-          <div className="flex items-center justify-between">
-            <span className="inline-block px-3 py-1 text-xs text-slate-500 bg-slate-50 rounded-full uppercase tracking-wider font-medium border border-slate-100">
-              {product.category}
-            </span>
-          </div>
+          <span className="inline-block px-3 py-1 text-sm text-neutral-600 bg-neutral-50 rounded-full uppercase tracking-wide font-medium border border-neutral-100">
+            {product.category}
+          </span>
 
           {/* Product Name */}
+
           <Link
             to={`/product/${product.id}`}
-            className="block group/link"
+            className="block group/link focus:outline-none focus:ring-2 focus:ring-neutral-300 rounded"
           >
-            <h3 className="font-heading text-xl lg:text-2xl text-slate-900 group-hover/link:text-slate-700 transition-colors duration-300 leading-tight font-light tracking-[-0.01em]">
+            <h3 className="font-heading font-serif text-xl lg:text-2xl text-neutral-900 group-hover/link:text-neutral-700 transition-colors duration-200 leading-tight tracking-tight">
               {product.name}
             </h3>
           </Link>
 
-          {/* Price with refined styling */}
-          <div className="pt-2">
-            <div className="flex items-center justify-between">
-              <span className="text-2xl font-light text-slate-900 tracking-tight">
-                {formatPrice(product.price)}
-              </span>
-              <div className="w-6 h-px bg-slate-200"></div>
-            </div>
+          {/* Price */}
+          <div className="pt-1">
+            <span className="text-xl font-light text-neutral-900 tracking-tight">
+              {formatPrice(product.price)}
+            </span>
           </div>
         </div>
       </CardContent>
-      
-      <CardFooter className="pt-0 px-8 pb-8">
+
+      <CardFooter className="pt-0 px-6 pb-6">
         <Button
           variant="outline"
-          className="w-full group/btn relative overflow-hidden flex items-center justify-center gap-3 hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all duration-500 py-4 rounded-full border-slate-300 font-medium text-slate-700 hover:shadow-lg hover:shadow-slate-900/25"
+          className="w-full group/btn relative overflow-hidden flex items-center justify-center gap-2 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition-all duration-300 py-3 rounded-full border-neutral-300 font-medium text-neutral-700 hover:shadow-md"
+          onClick={handleAddToCart}
+          aria-label={`Add ${product.name} to cart`}
         >
-          {/* Button background animation */}
-          <div className="absolute inset-0 bg-slate-900 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-500 rounded-full"></div>
-          
-          {/* Icon with rotation animation */}
-          <ShoppingBag 
-            size={18} 
-            className="relative z-10 transition-all duration-300 group-hover/btn:scale-110" 
+          <div className="absolute inset-0 bg-neutral-900 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-full"></div>
+          <ShoppingBag
+            size={16}
+            className="relative z-10 transition-transform duration-300 group-hover/btn:scale-110"
           />
-          
-          <span className="relative z-10 transition-all duration-300">
-            Add to Cart
-          </span>
-
-          {/* Subtle plus icon that appears on hover */}
-          <Plus 
-            size={14} 
-            className="relative z-10 opacity-0 group-hover/btn:opacity-100 transition-all duration-300 transform translate-x-2 group-hover/btn:translate-x-0" 
+          <span className="relative z-10">Add to Cart</span>
+          <Plus
+            size={14}
+            className="relative z-10 opacity-0 group-hover/btn:opacity-100 transition-all duration-300 transform translate-x-2 group-hover/btn:translate-x-0"
           />
         </Button>
       </CardFooter>
