@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { formatPrice, formatDate } from '../../lib/utils';
 import { 
@@ -40,17 +40,58 @@ const OrderDetailPage = () => {
   const [isRefundDialogOpen, setIsRefundDialogOpen] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
-  const fetchOrder = async () => {
+  const fetchOrder = async (retryCount = 0) => {
     setLoading(true);
     setError(null);
     try {
       const response = await OrderService.getOrder(id);
-      setOrder(response.order);
-      setStatusUpdate(response.order.status);
+      const orderData = response.order;
+      setOrder({
+        ...orderData,
+        customer: {
+          id: orderData.user?._id || 'N/A',
+          name: orderData.user ? `${orderData.user.firstName} ${orderData.user.lastName}` : 'Guest',
+          email: orderData.user?.email || 'N/A',
+          phone: orderData.user?.phone || 'N/A'
+        },
+        date: orderData.createdAt,
+        items: orderData.items.map(item => ({
+          id: item._id,
+          product_id: item.product?._id,
+          name: item.product?.name || 'Unknown Product',
+          variant: item.variant || '',
+          price: item.price,
+          quantity: item.quantity,
+          subtotal: item.subtotal
+        })),
+        timeline: orderData.timeline.map(event => ({
+          id: event._id,
+          date: event.createdAt,
+          status: event.status,
+          description: event.note || `Order status updated to ${event.status}`
+        })),
+        notes: orderData.notes.map(note => ({
+          id: note._id,
+          date: note.createdAt,
+          content: note.content,
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+        })),
+        shipping_address: orderData.shippingAddress,
+        payment_method: orderData.paymentInfo?.method || 'N/A',
+        payment_id: orderData.paymentInfo?.id || 'N/A',
+        payment_status: orderData.paymentInfo?.status || 'N/A',
+        shipping_method: orderData.shippingMethod || 'Standard Delivery'
+      });
+      setStatusUpdate(orderData.status);
     } catch (err) {
-      console.error('Error fetching order:', err);
-      setError(err.message || 'Failed to load order details');
-      toast.error(err.message || 'Failed to load order details');
+      if (retryCount < 3) {
+        toast(`Retrying ${retryCount + 1} of 3...`, { icon: '🔄' });
+        setTimeout(() => fetchOrder(retryCount + 1), 1000);
+      } else {
+        console.error('Error fetching order:', err);
+        setError(err.message || 'Failed to load order details');
+        toast.error(err.message || 'Failed to load order details');
+      }
     } finally {
       setLoading(false);
     }
@@ -64,7 +105,16 @@ const OrderDetailPage = () => {
     if (statusUpdate && statusUpdate !== order.status) {
       try {
         const response = await OrderService.updateOrderStatus(id, statusUpdate);
-        setOrder(response.order);
+        setOrder({
+          ...order,
+          status: response.order.status,
+          timeline: response.order.timeline.map(event => ({
+            id: event._id,
+            date: event.createdAt,
+            status: event.status,
+            description: event.note || `Order status updated to ${event.status}`
+          }))
+        });
         toast.success('Order status updated successfully');
       } catch (err) {
         console.error('Error updating status:', err);
@@ -77,7 +127,15 @@ const OrderDetailPage = () => {
     if (note.trim()) {
       try {
         const response = await OrderService.addOrderNote(id, { content: note.trim() });
-        setOrder(response.order);
+        setOrder({
+          ...order,
+          notes: response.order.notes.map(note => ({
+            id: note._id,
+            date: note.createdAt,
+            content: note.content,
+            createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+          }))
+        });
         setNote('');
         toast.success('Note added successfully');
       } catch (err) {
@@ -90,7 +148,16 @@ const OrderDetailPage = () => {
   const handleCancelOrder = async () => {
     try {
       const response = await OrderService.updateOrderStatus(id, 'cancelled');
-      setOrder(response.order);
+      setOrder({
+        ...order,
+        status: response.order.status,
+        timeline: response.order.timeline.map(event => ({
+          id: event._id,
+          date: event.createdAt,
+          status: event.status,
+          description: event.note || `Order status updated to ${event.status}`
+        }))
+      });
       setIsCancelDialogOpen(false);
       toast.success('Order cancelled successfully');
     } catch (err) {
@@ -109,7 +176,23 @@ const OrderDetailPage = () => {
         amount: parseFloat(refundAmount),
         reason: refundReason
       });
-      setOrder(response.order);
+      setOrder({
+        ...order,
+        status: response.order.status,
+        payment_status: response.order.paymentInfo.status,
+        timeline: response.order.timeline.map(event => ({
+          id: event._id,
+          date: event.createdAt,
+          status: event.status,
+          description: event.note || `Order status updated to ${event.status}`
+        })),
+        notes: response.order.notes.map(note => ({
+          id: note._id,
+          date: note.createdAt,
+          content: note.content,
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+        }))
+      });
       setIsRefundDialogOpen(false);
       setRefundAmount('');
       setRefundReason('');
@@ -123,13 +206,22 @@ const OrderDetailPage = () => {
   const handlePrintInvoice = () => {
     const printContent = `
       <html>
-        <head><title>Invoice ${order.id}</title></head>
+        <head><title>Invoice ${order.id}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #2d3748; }
+            table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            th, td { border: 1px solid #e2e8f0; padding: 8px; text-align: left; }
+            th { background-color: #f7fafc; }
+            .total { font-weight: bold; }
+          </style>
+        </head>
         <body>
           <h1>Invoice ${order.id}</h1>
           <p>Customer: ${order.customer.name}</p>
-          <p>Date: ${order.date}</p>
+          <p>Date: ${formatDate(order.date)}</p>
           <h2>Items</h2>
-          <table border="1">
+          <table>
             <tr><th>Product</th><th>Quantity</th><th>Price</th><th>Subtotal</th></tr>
             ${order.items.map(item => `
               <tr>
@@ -143,7 +235,7 @@ const OrderDetailPage = () => {
           <p>Subtotal: ${formatPrice(order.subtotal)}</p>
           <p>Shipping: ${formatPrice(order.shipping)}</p>
           ${order.tax > 0 ? `<p>Tax: ${formatPrice(order.tax)}</p>` : ''}
-          <p><strong>Total: ${formatPrice(order.total)}</strong></p>
+          <p class="total">Total: ${formatPrice(order.total)}</p>
         </body>
       </html>
     `;
@@ -156,6 +248,15 @@ const OrderDetailPage = () => {
   const handleSendEmail = async () => {
     try {
       const response = await OrderService.sendOrderEmail(id);
+      setOrder({
+        ...order,
+        notes: response.order.notes.map(note => ({
+          id: note._id,
+          date: note.createdAt,
+          content: note.content,
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+        }))
+      });
       toast.success('Email sent successfully');
     } catch (err) {
       console.error('Error sending email:', err);
@@ -343,7 +444,9 @@ const OrderDetailPage = () => {
                     order.notes.map((noteItem) => (
                       <div key={noteItem.id} className="bg-slate-50 p-4 rounded-md">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium text-secondary">{noteItem.createdBy?.firstName || 'Admin'}</span>
+                          <span className="font-medium text-secondary">
+                            {noteItem.createdBy?.firstName || 'Admin'} {noteItem.createdBy?.lastName || ''}
+                          </span>
                           <span className="text-xs text-slate-500">{formatDate(noteItem.date)}</span>
                         </div>
                         <p className="text-sm text-slate-600">{noteItem.content}</p>
@@ -398,11 +501,11 @@ const OrderDetailPage = () => {
                       className="flex-1 px-4 py-2 border border-slate-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
                       disabled={loading}
                     >
-                      <option value="Pending">Pending</option>
-                      <option value="Processing">Processing</option>
-                      <option value="Shipped">Shipped</option>
-                      <option value="Delivered">Delivered</option>
-                      <option value="Cancelled">Cancelled</option>
+                      <option value="pending">Pending</option>
+                      <option value="processing">Processing</option>
+                      <option value="shipped">Shipped</option>
+                      <option value="delivered">Delivered</option>
+                      <option value="cancelled">Cancelled</option>
                     </select>
                     <Button 
                       onClick={handleStatusUpdate} 
@@ -419,7 +522,7 @@ const OrderDetailPage = () => {
                     variant="outline"
                     className="w-full justify-start text-red-600 hover:bg-red-50 hover:border-red-200"
                     onClick={() => setIsCancelDialogOpen(true)}
-                    disabled={order.status === 'Cancelled' || loading}
+                    disabled={order.status === 'cancelled' || loading}
                   >
                     <Trash2 size={16} className="mr-2" />
                     Cancel Order
@@ -431,7 +534,7 @@ const OrderDetailPage = () => {
                     variant="outline"
                     className="w-full justify-start text-blue-600 hover:bg-blue-50 hover:border-blue-200"
                     onClick={() => setIsRefundDialogOpen(true)}
-                    disabled={order.payment_status !== 'Paid' || order.status === 'Refunded' || loading}
+                    disabled={order.payment_status !== 'paid' || order.status === 'refunded' || loading}
                   >
                     <CreditCard size={16} className="mr-2" />
                     Process Refund
@@ -461,7 +564,7 @@ const OrderDetailPage = () => {
                   </div>
                   <div className="flex items-start">
                     <Phone size={16} className="mr-2 mt-0.5 text-slate-400" />
-                    <div className="text-sm">{order.customer.phone || 'N/A'}</div>
+                    <div className="text-sm">{order.customer.phone}</div>
                   </div>
                   <div className="pt-2">
                     <Link to={`/admin/customers/${order.customer.id}`}>
@@ -498,7 +601,7 @@ const OrderDetailPage = () => {
                     <Truck size={16} className="mr-2 mt-0.5 text-slate-400" />
                     <div>
                       <div className="font-medium">Shipping Method</div>
-                      <div className="text-sm text-slate-600">{order.shipping_method || 'Standard Delivery'}</div>
+                      <div className="text-sm text-slate-600">{order.shipping_method}</div>
                     </div>
                   </div>
                 </div>
@@ -517,14 +620,14 @@ const OrderDetailPage = () => {
                     <CreditCard size={16} className="mr-2 mt-0.5 text-slate-400" />
                     <div>
                       <div className="font-medium">Payment Method</div>
-                      <div className="text-sm text-slate-600">{order.payment_method || 'N/A'}</div>
+                      <div className="text-sm text-slate-600">{order.payment_method}</div>
                     </div>
                   </div>
                   <div className="flex items-start">
                     <FileText size={16} className="mr-2 mt-0.5 text-slate-400" />
                     <div>
                       <div className="font-medium">Transaction ID</div>
-                      <div className="text-sm text-slate-600">{order.payment_id || 'N/A'}</div>
+                      <div className="text-sm text-slate-600">{order.payment_id}</div>
                     </div>
                   </div>
                   <div className="flex items-start">
@@ -533,9 +636,9 @@ const OrderDetailPage = () => {
                       <div className="font-medium">Payment Status</div>
                       <div className="mt-1">
                         <span className={`px-2 py-1 text-xs rounded-full ${
-                          order.payment_status === 'Paid' ? 'bg-green-100 text-green-800' :
-                          order.payment_status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                          order.payment_status === 'Refunded' ? 'bg-blue-100 text-blue-800' :
+                          order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                          order.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          order.payment_status === 'refunded' ? 'bg-blue-100 text-blue-800' :
                           'bg-red-100 text-red-800'
                         }`}>
                           {order.payment_status}
@@ -567,6 +670,8 @@ const OrderDetailPage = () => {
                   onChange={(e) => setRefundAmount(e.target.value)}
                   placeholder="Enter refund amount"
                   className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  min="0"
+                  max={order.total}
                 />
               </div>
               <div>
@@ -587,7 +692,7 @@ const OrderDetailPage = () => {
               <Button variant="outline" onClick={() => setIsRefundDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleRefund} disabled={!refundAmount || !refundReason}>
+              <Button onClick={handleRefund} disabled={!refundAmount || !refundReason || loading}>
                 Process Refund
               </Button>
             </DialogFooter>
@@ -607,7 +712,12 @@ const OrderDetailPage = () => {
               <Button variant="outline" onClick={() => setIsCancelDialogOpen(false)}>
                 No, Keep Order
               </Button>
-              <Button variant="destructive" onClick={handleCancelOrder}>
+              <Button 
+                variant="outline" 
+                className="text-red-600 hover:bg-red-50 hover:border-red-200"
+                onClick={handleCancelOrder}
+                disabled={loading}
+              >
                 Yes, Cancel Order
               </Button>
             </DialogFooter>
