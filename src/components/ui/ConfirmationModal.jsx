@@ -11,6 +11,7 @@ const ConfirmationModal = ({
   confirmText = 'Confirm',
   cancelText = 'Cancel',
   type = 'warning', // 'warning', 'info', 'question', 'danger'
+  confirmVariant, // Optional prop to override the button style
   isLoading = false,
 }) => {
   if (!isOpen) return null;
@@ -31,6 +32,23 @@ const ConfirmationModal = ({
   };
 
   const getConfirmButtonStyle = () => {
+    // If confirmVariant is provided, use it to determine the button style
+    if (confirmVariant) {
+      switch (confirmVariant) {
+        case 'danger':
+          return 'bg-red-600 hover:bg-red-700 focus:ring-red-500';
+        case 'warning':
+          return 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500';
+        case 'info':
+          return 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500';
+        case 'success':
+          return 'bg-green-600 hover:bg-green-700 focus:ring-green-500';
+        default:
+          return ''; // Use default button style
+      }
+    }
+    
+    // Otherwise, use the type to determine the button style
     switch (type) {
       case 'danger':
         return 'bg-red-600 hover:bg-red-700 focus:ring-red-500';

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ShoppingBag, User, Search } from 'lucide-react';
+import { Menu, X, ShoppingBag, User, Search, LogIn } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { useCart } from '../../contexts/CartContext';
 
@@ -41,6 +41,7 @@ const Header = () => {
     { path: '/shop', label: 'Shop' },
     { path: '/about', label: 'About' },
     { path: '/contact', label: 'Contact' },
+    { path: '/admin/login', label: 'Login' }, // Added admin login link
   ];
 
   // Get cart item count
@@ -170,7 +171,15 @@ const Header = () => {
                 }}
                 onClick={toggleMenu}
               >
-                {item.label}
+                {/* Add LogIn icon for the Login link */}
+                {item.path === '/admin/login' ? (
+                  <span className="flex items-center gap-3">
+                    <LogIn size={20} />
+                    {item.label}
+                  </span>
+                ) : (
+                  item.label
+                )}
               </Link>
             ))}
             

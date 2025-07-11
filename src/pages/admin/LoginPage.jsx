@@ -170,7 +170,7 @@ const LoginPage = () => {
         
         <div className="px-6 pb-6 text-center text-xs text-slate-500">
           <p>For demo purposes, use:</p>
-          <p className="font-medium">Email: admin@scenture.com | Password: password</p>
+          <p className="font-medium">Email: admin@scenture.com | Password: scenture@1</p>
         </div>
       </Card>
     </div>

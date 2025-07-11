@@ -10,11 +10,13 @@ import {
   Warehouse,
   Settings,
   ChevronRight,
+  Tags,
 } from 'lucide-react';
 
 const navItems = [
   { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
   { name: 'Products', path: '/admin/products', icon: Package },
+  { name: 'Categories', path: '/admin/categories', icon: Tags },
   { name: 'Orders', path: '/admin/orders', icon: ShoppingCart },
   { name: 'Customers', path: '/admin/customers', icon: Users },
   { name: 'Inventory', path: '/admin/inventory', icon: Warehouse },

@@ -9,8 +9,14 @@ const SettingsService = {
    * @returns {Promise<Object>} Store settings
    */
   getStoreSettings: async () => {
-    const response = await api.get('/admin/settings');
-    return response.data;
+    try {
+      const response = await api.get('/admin/settings');
+      console.log('getStoreSettings response:', response.data);
+      return response.data.data.settings;
+    } catch (error) {
+      console.error('Error in getStoreSettings:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
 
   /**
@@ -19,8 +25,14 @@ const SettingsService = {
    * @returns {Promise<Object>} Updated store settings
    */
   updateStoreSettings: async (settingsData) => {
-    const response = await api.put('/admin/settings', settingsData);
-    return response.data;
+    try {
+      const response = await api.put('/admin/settings', settingsData);
+      console.log('updateStoreSettings response:', response.data);
+      return response.data.data.settings;
+    } catch (error) {
+      console.error('Error in updateStoreSettings:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
 
   /**
@@ -28,8 +40,14 @@ const SettingsService = {
    * @returns {Promise<Object>} Admin users
    */
   getAdminUsers: async () => {
-    const response = await api.get('/admin/settings/users');
-    return response.data;
+    try {
+      const response = await api.get('/admin/users');
+      console.log('getAdminUsers response:', response.data);
+      return response.data.data; // Returns { users, pagination metadata }
+    } catch (error) {
+      console.error('Error in getAdminUsers:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
 
   /**
@@ -38,8 +56,14 @@ const SettingsService = {
    * @returns {Promise<Object>} Admin user data
    */
   getAdminUser: async (id) => {
-    const response = await api.get(`/admin/settings/users/${id}`);
-    return response.data;
+    try {
+      const response = await api.get(`/admin/users/${id}`);
+      console.log('getAdminUser response:', response.data);
+      return response.data.data; // Returns { user }
+    } catch (error) {
+      console.error('Error in getAdminUser:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
 
   /**
@@ -48,8 +72,14 @@ const SettingsService = {
    * @returns {Promise<Object>} Created admin user
    */
   createAdminUser: async (userData) => {
-    const response = await api.post('/admin/settings/users', userData);
-    return response.data;
+    try {
+      const response = await api.post('/admin/users', userData);
+      console.log('createAdminUser response:', response.data);
+      return response.data.data; // Returns { user }
+    } catch (error) {
+      console.error('Error in createAdminUser:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
 
   /**
@@ -59,8 +89,14 @@ const SettingsService = {
    * @returns {Promise<Object>} Updated admin user
    */
   updateAdminUser: async (id, userData) => {
-    const response = await api.put(`/admin/settings/users/${id}`, userData);
-    return response.data;
+    try {
+      const response = await api.put(`/admin/users/${id}`, userData);
+      console.log('updateAdminUser response:', response.data);
+      return response.data.data; // Returns { user }
+    } catch (error) {
+      console.error('Error in updateAdminUser:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
 
   /**
@@ -69,66 +105,15 @@ const SettingsService = {
    * @returns {Promise<Object>} Deletion confirmation
    */
   deleteAdminUser: async (id) => {
-    const response = await api.delete(`/admin/settings/users/${id}`);
-    return response.data;
+    try {
+      const response = await api.delete(`/admin/users/${id}`);
+      console.log('deleteAdminUser response:', response.data);
+      return response.data; // Returns success message
+    } catch (error) {
+      console.error('Error in deleteAdminUser:', error.response?.data?.error || error.message);
+      throw error;
+    }
   },
-
-  /**
-   * Get payment settings
-   * @returns {Promise<Object>} Payment settings
-   */
-  getPaymentSettings: async () => {
-    const response = await api.get('/admin/settings/payment');
-    return response.data;
-  },
-
-  /**
-   * Update payment settings
-   * @param {Object} paymentData - Updated payment settings
-   * @returns {Promise<Object>} Updated payment settings
-   */
-  updatePaymentSettings: async (paymentData) => {
-    const response = await api.put('/admin/settings/payment', paymentData);
-    return response.data;
-  },
-
-  /**
-   * Get shipping settings
-   * @returns {Promise<Object>} Shipping settings
-   */
-  getShippingSettings: async () => {
-    const response = await api.get('/admin/settings/shipping');
-    return response.data;
-  },
-
-  /**
-   * Update shipping settings
-   * @param {Object} shippingData - Updated shipping settings
-   * @returns {Promise<Object>} Updated shipping settings
-   */
-  updateShippingSettings: async (shippingData) => {
-    const response = await api.put('/admin/settings/shipping', shippingData);
-    return response.data;
-  },
-
-  /**
-   * Get email settings
-   * @returns {Promise<Object>} Email settings
-   */
-  getEmailSettings: async () => {
-    const response = await api.get('/admin/settings/email');
-    return response.data;
-  },
-
-  /**
-   * Update email settings
-   * @param {Object} emailData - Updated email settings
-   * @returns {Promise<Object>} Updated email settings
-   */
-  updateEmailSettings: async (emailData) => {
-    const response = await api.put('/admin/settings/email', emailData);
-    return response.data;
-  }
 };
 
 export default SettingsService;

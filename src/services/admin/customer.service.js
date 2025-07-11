@@ -9,14 +9,28 @@ const CustomerService = {
    * @param {Object} params - Query parameters
    * @param {number} [params.page=1] - Page number
    * @param {number} [params.limit=10] - Items per page
-   * @param {string} [params.sort] - Sort field
-   * @param {string} [params.order='asc'] - Sort order (asc, desc)
    * @param {string} [params.search] - Search term
+   * @param {string} [params.status] - Status filter (active, inactive)
    * @returns {Promise<Object>} Customers data with pagination
    */
   getCustomers: async (params = {}) => {
     const response = await api.get('/admin/customers', { params });
     return response.data;
+  },
+
+  /**
+   * Create a new customer
+   * @param {Object} customerData - Customer data
+   * @returns {Promise<Object>} Created customer data
+   */
+  createCustomer: async (customerData) => {
+    try {
+    const response = await api.post('/admin/customers', customerData);
+    return response.data;
+    } catch (error) {
+      console.error(`Error creating customer: ${error.response?.data?.error || error.message}`);
+      throw new Error(error.response?.data?.error || 'Failed to create customer');
+    }
   },
 
   /**
@@ -54,11 +68,15 @@ const CustomerService = {
   },
 
   /**
-   * Get customer statistics
-   * @returns {Promise<Object>} Customer statistics
+   * Get customer reviews
+   * @param {string} id - Customer ID
+   * @param {Object} params - Query parameters
+   * @param {number} [params.page=1] - Page number
+   * @param {number} [params.limit=10] - Items per page
+   * @returns {Promise<Object>} Customer reviews with pagination
    */
-  getCustomerStatistics: async () => {
-    const response = await api.get('/admin/customers/statistics');
+  getCustomerReviews: async (id, params = {}) => {
+    const response = await api.get(`/admin/customers/${id}/reviews`, { params });
     return response.data;
   },
 
@@ -93,7 +111,39 @@ const CustomerService = {
   deleteCustomerNote: async (customerId, noteId) => {
     const response = await api.delete(`/admin/customers/${customerId}/notes/${noteId}`);
     return response.data;
-  }
+  },
+
+  /**
+   * Update customer VIP status
+   * @param {string} id - Customer ID
+   * @param {boolean} isVip - VIP status
+   * @returns {Promise<Object>} Updated customer data
+   */
+  updateCustomerVip: async (id, isVip) => {
+    const response = await api.put(`/admin/customers/${id}/vip`, { isVip });
+    return response.data;
+  },
+
+  /**
+   * Flag customer for review
+   * @param {string} id - Customer ID
+   * @param {boolean} isFlagged - Flag status
+   * @returns {Promise<Object>} Updated customer data
+   */
+  updateCustomerFlag: async (id, isFlagged) => {
+    const response = await api.put(`/admin/customers/${id}/flag`, { isFlagged });
+    return response.data;
+  },
+
+  /**
+   * Deactivate customer
+   * @param {string} id - Customer ID
+   * @returns {Promise<Object>} Updated customer data
+   */
+  deactivateCustomer: async (id) => {
+    const response = await api.put(`/admin/customers/${id}/deactivate`);
+    return response.data;
+  },
 };
 
 export default CustomerService;

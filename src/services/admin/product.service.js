@@ -47,14 +47,8 @@ const ProductService = {
         total: total || 0
       };
     } catch (error) {
-      console.error(`Error fetching products: ${error.response?.status || error.message}`);
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          data: FALLBACK_PRODUCTS,
-          total: FALLBACK_PRODUCTS.length
-        };
-      }
-      throw error;
+      console.error(`Error fetching products: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to fetch products');
     }
   },
 
@@ -63,48 +57,78 @@ const ProductService = {
       const response = await api.get(`/admin/products/${id}`);
       return response.data;
     } catch (error) {
-      console.error(`Error fetching product: ${error.response?.status || error.message}`);
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          product: {
-            id: '1',
-            name: 'Lavender Dreams Candle',
-            sku: 'CAN-001',
-            price: 12500,
-            stock: 45,
-            status: 'published',
-            category: 'Candles',
-            categoryId: '1',
-            description: 'A soothing lavender scented candle.',
-            scent_notes: ['Lavender', 'Vanilla', 'Bergamot'],
-            ingredients: 'Soy wax, Lavender essential oil, Vanilla extract',
-            variants: [
-              { id: 1, size: '8oz', price: 12500, stock: 25 },
-              { id: 2, size: '12oz', price: 18500, stock: 20 }
-            ],
-            images: ['/images/product1.jpg']
-          }
-        };
-      }
-      throw error;
+      console.error(`Error fetching product: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to fetch product');
     }
   },
 
-  getAllCategories: async () => {
+  getAllCategories: async (params = {}) => {
     try {
-      const response = await api.get('/admin/categories');
-      const { data } = response.data;
-      return {
-        data: data || []
+      // Check if tree view is requested
+      if (params.tree === true) {
+        return ProductService.getCategoryTree();
+      }
+      
+      // Only use cache if no query parameters are provided
+      if (Object.keys(params).length === 0) {
+        const cached = localStorage.getItem('categories');
+        if (cached) {
+          const { data, timestamp } = JSON.parse(cached);
+          if (Date.now() - timestamp < 3600000) { // 1 hour TTL
+            return { data };
+          }
+        }
+      }
+      
+      const response = await api.get('/admin/categories', { params });
+      const { data, total } = response.data;
+      
+      // Only cache the full category list without filters
+      if (Object.keys(params).length === 0) {
+        localStorage.setItem('categories', JSON.stringify({ data, timestamp: Date.now() }));
+      }
+      
+      return { 
+        data: data || [],
+        total: total || 0
       };
     } catch (error) {
-      console.error(`Error fetching categories: ${error.response?.status || error.message}`);
-      if (process.env.NODE_ENV === 'development') {
-        return {
-          data: FALLBACK_CATEGORIES
-        };
+      console.error(`Error fetching categories: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to fetch categories');
+    }
+  },
+  
+getCategoryTree: async () => {
+  try {
+    // Check cache first
+    const cached = localStorage.getItem('categoryTree');
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < 3600000) { // 1 hour TTL
+        return { data };
       }
-      throw error;
+    }
+
+    const response = await api.get('/admin/categories', { params: { tree: true } });
+    const categories = response.data.data?.categories || []; // Extract categories correctly
+
+    // Cache the category tree
+    localStorage.setItem('categoryTree', JSON.stringify({ data: categories, timestamp: Date.now() }));
+
+    return { data: categories };
+  } catch (error) {
+    console.error(`Error fetching category tree: ${error.response?.data?.message || error.message}`);
+    throw new Error(error.response?.data?.message || 'Failed to fetch category tree');
+  }
+},
+  
+  getCategory: async (id) => {
+    try {
+      const response = await api.get(`/admin/categories/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching category: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to fetch category');
     }
   },
 
@@ -113,40 +137,43 @@ const ProductService = {
       const response = await api.post('/admin/products', productData);
       return response.data;
     } catch (error) {
-      console.error(`Error creating product: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error creating product: ${error.response?.data?.error || error.message}`);
+      throw new Error(error.response?.data?.error || 'Failed to create product');
     }
   },
 
-  updateProduct: async (id, productData) => {
+    updateProduct: async (id, productData) => {
     try {
       const response = await api.put(`/admin/products/${id}`, productData);
       return response.data;
     } catch (error) {
-      console.error(`Error updating product: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error updating product: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to update product');
     }
   },
 
-  deleteProduct: async (id) => {
+   deleteProduct: async (id) => {
     try {
       const response = await api.delete(`/admin/products/${id}`);
       return response.data;
     } catch (error) {
-      console.error(`Error deleting product: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error deleting product: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to delete product');
     }
   },
 
-  uploadProductImages: async (productId, formData) => {
+   uploadProductImages: async (productId, formData, onUploadProgress) => {
     try {
       const response = await api.post(`/admin/products/${productId}/images`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: onUploadProgress ? (progressEvent) => {
+          onUploadProgress(progressEvent);
+        } : undefined
       });
       return response.data;
     } catch (error) {
-      console.error(`Error uploading product images: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error uploading product images: ${error.response?.data?.error || error.message}`);
+      throw new Error(error.response?.data?.error || 'Failed to upload images');
     }
   },
 
@@ -155,8 +182,18 @@ const ProductService = {
       const response = await api.delete(`/admin/products/${productId}/images/${imageId}`);
       return response.data;
     } catch (error) {
-      console.error(`Error deleting product image: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error deleting product image: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to delete image');
+    }
+  },
+
+  setMainProductImage: async (productId, imageId) => {
+    try {
+      const response = await api.put(`/admin/products/${productId}/images/${imageId}/main`);
+      return response.data;
+    } catch (error) {
+      console.error(`Error setting main product image: ${error.response?.data?.message || error.message}`);
+      throw new Error(error.response?.data?.message || 'Failed to set main image');
     }
   },
 
@@ -190,19 +227,14 @@ const ProductService = {
     }
   },
 
-   generateSKU: async (categoryId) => {
+    generateSKU: async (categoryId) => {
+      console.log('GENETAING SKUUUU')
     try {
       const response = await api.get('/admin/products/sku', { params: { categoryId } });
       return response.data;
     } catch (error) {
-      console.error(`Error generating SKU: ${error.response?.status || error.message}`);
-      if (process.env.NODE_ENV === 'development') {
-        // Fallback SKU generation for development
-        const category = FALLBACK_CATEGORIES.find(cat => cat.id === categoryId);
-        const prefix = category ? category.name.slice(0, 3).toUpperCase() : 'PRO';
-        return { sku: `${prefix}-001` };
-      }
-      throw error;
+      console.error(`Error generating SKU: ${error.response?.data?.error || error.message}`);
+      throw new Error(error.response?.data?.error || 'Failed to generate SKU');
     }
   }
 };

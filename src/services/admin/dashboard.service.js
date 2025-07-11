@@ -1,84 +1,92 @@
 import api from '../api';
 
-/**
- * Dashboard service for admin dashboard operations
- */
+// Simple in-memory cache
+const cache = new Map();
+const CACHE_TTL = 60000; // 60 seconds
+
 const DashboardService = {
-  /**
-   * Get dashboard summary data
-   * @param {Object} params - Query parameters
-   * @param {string} [params.startDate] - Start date for filtering data
-   * @param {string} [params.endDate] - End date for filtering data
-   * @returns {Promise<Object>} Dashboard summary data
-   */
   getDashboardSummary: async (params = {}) => {
+    const cacheKey = `summary_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get('/admin/dashboard/summary', { params });
-      return {
-        data: {
-          metrics: response.data.metrics || {},
-          charts: response.data.charts || { salesChart: [], orderStatusChart: [] },
-          dateRange: response.data.dateRange || {}
-        }
+      const data = {
+        metrics: {
+          totalSales: response.data.metrics?.totalSales || 0,
+          totalOrders: response.data.metrics?.totalOrders || 0,
+          inventoryValue: response.data.metrics?.inventoryValue || 0,
+          newCustomers: response.data.metrics?.newCustomers || 0,
+          salesGrowth: response.data.metrics?.salesGrowth || 0,
+          ordersGrowth: response.data.metrics?.ordersGrowth || 0,
+          customersGrowth: response.data.metrics?.customersGrowth || 0,
+          lowStockProducts: response.data.metrics?.lowStockProducts || 0
+        },
+        charts: response.data.charts || { salesChart: [], orderStatusChart: [] },
+        dateRange: response.data.dateRange || {}
       };
+      cache.set(cacheKey, { data, timestamp: Date.now() });
+      return { data };
     } catch (error) {
       console.error(`Error fetching dashboard summary: ${error.response?.status || error.message}`);
       throw error;
     }
   },
 
-  /**
-   * Get recent orders for dashboard
-   * @param {Object} params - Query parameters
-   * @param {number} [params.limit=5] - Number of orders to return
-   * @returns {Promise<Object>} Recent orders data
-   */
   getRecentOrders: async (params = { limit: 5 }) => {
+    const cacheKey = `recent-orders_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get('/admin/dashboard/recent-orders', { params });
-      return { data: { orders: response.data.orders || [] } };
+      const data = { orders: response.data.orders || [] };
+      cache.set(cacheKey, { data, timestamp: Date.now() });
+      return { data };
     } catch (error) {
       console.error(`Error fetching recent orders: ${error.response?.status || error.message}`);
       throw error;
     }
   },
 
-  /**
-   * Get activity feed for dashboard
-   * @param {Object} params - Query parameters
-   * @param {number} [params.limit=10] - Number of activities to return
-   * @param {string} [params.type] - Activity type filter (product, order, inventory, customer)
-   * @returns {Promise<Object>} Activity feed data
-   */
   getActivityFeed: async (params = { limit: 10 }) => {
+    const cacheKey = `activity-feed_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get('/admin/dashboard/activity-feed', { params });
-      return { data: { activities: response.data.activities || [] } };
+      const data = { activities: response.data.activities || [] };
+      cache.set(cacheKey, { data, timestamp: Date.now() });
+      return { data };
     } catch (error) {
       console.error(`Error fetching activity feed: ${error.response?.status || error.message}`);
       throw error;
     }
   },
 
-    /**
-   * Get sales data for charts
-   * @param {Object} params - Query parameters
-   * @param {string} [params.period='week'] - Period for sales data (day, week, month, year)
-   * @param {string} [params.startDate] - Start date for filtering data (YYYY-MM-DD)
-   * @param {string} [params.endDate] - End date for filtering data (YYYY-MM-DD)
-   * @returns {Promise<Object>} Sales data for charts
-   */
   getSalesData: async (params = { period: 'week' }) => {
+    const cacheKey = `sales-data_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get('/admin/dashboard/sales-data', { params });
       const salesChart = response.data.salesChart || [];
-
       const formattedData = salesChart.map(item => {
         const date = new Date(item.date);
         if (!item.date || isNaN(date.getTime())) {
           return { name: 'Unknown', sales: 0 };
         }
-
         let displayName;
         switch (params.period) {
           case 'week':
@@ -93,19 +101,16 @@ const DashboardService = {
           default:
             displayName = date.toLocaleDateString('en-US', { weekday: 'short' });
         }
-
-        return {
-          name: displayName,
-          sales: item.sales || 0
-        };
+        return { name: displayName, sales: item.sales || 0 };
       });
-
-      return { data: formattedData };
+      const data = { data: formattedData };
+      cache.set(cacheKey, { data, timestamp: Date.now() });
+      return data;
     } catch (error) {
       console.error(`Error fetching sales data: ${error.response?.status || error.message}`);
-      return { data: [] };
+      throw error;
     }
   }
-  };
+};
 
 export default DashboardService;

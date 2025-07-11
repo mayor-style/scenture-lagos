@@ -5,97 +5,143 @@ import api from '../api';
  */
 const InventoryService = {
   /**
-   * Get inventory overview with pagination, sorting, and filtering
-   * @param {Object} params - Query parameters
-   * @param {number} [params.page=1] - Page number
-   * @param {number} [params.limit=10] - Items per page
-   * @param {string} [params.sort] - Sort field
-   * @param {string} [params.order='asc'] - Sort order (asc, desc)
-   * @param {string} [params.search] - Search term
-   * @param {string} [params.category] - Filter by category ID
-   * @param {boolean} [params.lowStock] - Filter by low stock
-   * @returns {Promise<Object>} Inventory data with pagination
+   * Get inventory items with pagination and filtering
+   * @param {Object} params - Query parameters for filtering and pagination
+   * @returns {Promise<Object>} - Inventory items and total count
    */
   getInventory: async (params = {}) => {
-    const response = await api.get('/admin/inventory', { params });
-    return response.data;
+    try {
+      const mappedParams = { ...params };
+      if (params.status) {
+        mappedParams.stockStatus = params.status.replace('_', '');
+        delete mappedParams.status;
+      }
+      const response = await api.get('/admin/inventory', { params: mappedParams });
+      return {
+        items: response.data.items || [],
+        total: response.data.total || 0,
+      };
+    } catch (error) {
+      console.error('Error fetching inventory:', error);
+      throw error;
+    }
   },
 
   /**
-   * Get a single inventory item by product ID
+   * Get a single inventory item by ID
    * @param {string} id - Product ID
-   * @returns {Promise<Object>} Inventory item data
+   * @returns {Promise<Object>} - Product data
    */
   getInventoryItem: async (id) => {
-    const response = await api.get(`/admin/inventory/${id}`);
-    return response.data;
+    try {
+      const response = await api.get(`/admin/inventory/${id}`);
+      return response.data.product || {};
+    } catch (error) {
+      console.error(`Error fetching inventory item ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Adjust inventory stock
+   * Adjust stock quantity for a product or variant
    * @param {string} id - Product ID
    * @param {Object} adjustmentData - Adjustment data
-   * @param {number} adjustmentData.quantity - Quantity to adjust (positive for increase, negative for decrease)
-   * @param {string} adjustmentData.reason - Reason for adjustment
-   * @returns {Promise<Object>} Updated inventory item
+   * @returns {Promise<Object>} - Updated product data
    */
   adjustStock: async (id, adjustmentData) => {
-    const response = await api.put(`/admin/inventory/${id}/adjust`, adjustmentData);
-    return response.data;
+    try {
+      const response = await api.put(`/admin/inventory/${id}/adjust`, {
+        adjustment: adjustmentData.quantity,
+        reason: adjustmentData.reason,
+        variantId: adjustmentData.variantId || null,
+        allowNegative: false,
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error adjusting stock for product ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
-   * Get inventory history for a product
+   * Get stock adjustment history for a product
    * @param {string} id - Product ID
    * @param {Object} params - Query parameters
-   * @param {number} [params.page=1] - Page number
-   * @param {number} [params.limit=10] - Items per page
-   * @returns {Promise<Object>} Inventory history with pagination
+   * @returns {Promise<Object>} - Stock adjustment history
    */
   getInventoryHistory: async (id, params = {}) => {
-    const response = await api.get(`/admin/inventory/${id}/history`, { params });
-    return response.data;
+    try {
+      const response = await api.get(`/admin/inventory/${id}/history`, { params });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching inventory history for product ${id}:`, error);
+      throw error;
+    }
   },
 
   /**
    * Get inventory statistics
-   * @returns {Promise<Object>} Inventory statistics
+   * @returns {Promise<Object>} - Inventory statistics
    */
   getInventoryStatistics: async () => {
-    const response = await api.get('/admin/inventory/statistics');
-    return response.data;
+    try {
+      const response = await api.get('/admin/inventory', { params: { page: 1, limit: 1 } });
+      const { summary, totalInventoryValue } = response.data;
+      return {
+        totalProducts: summary?.totalProducts || 0,
+        inStockCount: summary?.totalProducts - (summary?.lowStockProducts || 0) - (summary?.outOfStockProducts || 0),
+        lowStockCount: summary?.lowStockProducts || 0,
+        outOfStockCount: summary?.outOfStockProducts || 0,
+        totalValue: totalInventoryValue || 0,
+      };
+    } catch (error) {
+      console.error('Error fetching inventory statistics:', error);
+      throw error;
+    }
   },
 
   /**
    * Get low stock items
    * @param {Object} params - Query parameters
-   * @param {number} [params.limit=10] - Number of items to return
-   * @returns {Promise<Object>} Low stock items
+   * @returns {Promise<Object>} - Low stock items
    */
   getLowStockItems: async (params = { limit: 10 }) => {
-    const response = await api.get('/admin/inventory/low-stock', { params });
-    return response.data;
+    try {
+      const response = await api.get('/admin/inventory/low-stock', { params });
+      return { items: response.data.items || [] };
+    } catch (error) {
+      console.error('Error fetching low stock items:', error);
+      throw error;
+    }
   },
 
   /**
-   * Update inventory settings
-   * @param {Object} settingsData - Settings data
-   * @param {number} settingsData.lowStockThreshold - Low stock threshold
-   * @returns {Promise<Object>} Updated settings
+   * Generate inventory report as PDF
+   * @returns {Promise<Blob>} - PDF report as blob
    */
-  updateInventorySettings: async (settingsData) => {
-    const response = await api.put('/admin/inventory/settings', settingsData);
-    return response.data;
+  generateReport: async () => {
+    try {
+      const response = await api.get('/admin/inventory/report', { responseType: 'blob' });
+      return response.data;
+    } catch (error) {
+      console.error('Error generating inventory report:', error);
+      throw error;
+    }
   },
 
   /**
-   * Get inventory settings
-   * @returns {Promise<Object>} Inventory settings
+   * Export inventory data as CSV
+   * @returns {Promise<Blob>} - CSV data as blob
    */
-  getInventorySettings: async () => {
-    const response = await api.get('/admin/inventory/settings');
-    return response.data;
-  }
+  exportCSV: async () => {
+    try {
+      const response = await api.get('/admin/inventory/export', { responseType: 'blob' });
+      return response.data;
+    } catch (error) {
+      console.error('Error exporting inventory CSV:', error);
+      throw error;
+    }
+  },
 };
 
 export default InventoryService;

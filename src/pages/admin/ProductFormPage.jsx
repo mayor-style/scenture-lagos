@@ -1,16 +1,16 @@
-// File: ProductFormPage.jsx
+// File: src/pages/admin/ProductFormPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { ArrowLeft, Save, Trash2, Plus, X, Upload, Image, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Plus, X, Upload, Image as ImageIcon, Eye } from 'lucide-react';
 import ProductService from '../../services/admin/product.service';
 import toast from 'react-hot-toast';
 import { formatPrice } from '../../lib/utils';
 
 const ProductFormPage = () => {
-  const { id, action } = useParams(); // Added 'action' to handle view/edit
+  const { id, action } = useParams();
   const navigate = useNavigate();
   const isEditMode = Boolean(id && action === 'edit');
   const isViewMode = Boolean(id && action === 'view');
@@ -42,11 +42,9 @@ const ProductFormPage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch categories
         const categoriesResponse = await ProductService.getAllCategories();
         setCategories(categoriesResponse.data);
 
-        // Fetch product data if in edit or view mode
         if (id) {
           const { product } = await ProductService.getProduct(id);
           setFormData({
@@ -61,12 +59,11 @@ const ProductFormPage = () => {
             scent_notes: product.scent_notes || [],
             ingredients: product.ingredients || '',
             variants: product.variants || [],
-            images: product.images.map(img => img.url) || []
+            images: product.images.map(img => ({ url: img.url, _id: img._id })) || []
           });
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
-        toast.error('Failed to load data');
+        toast.error(err.message);
       } finally {
         setLoading(false);
       }
@@ -76,7 +73,7 @@ const ProductFormPage = () => {
   }, [id, isEditMode, isViewMode]);
 
   const handleChange = (e) => {
-    if (isViewMode) return; // Prevent changes in view mode
+    if (isViewMode) return;
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -131,66 +128,197 @@ const ProductFormPage = () => {
     }));
   };
 
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const compressImage = async (file) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            const compressedFile = new File([blob], file.name, {
+              type: 'image/jpeg',
+              lastModified: Date.now()
+            });
+            resolve(compressedFile);
+          }, 'image/jpeg', 0.7); // 0.7 quality (70%)
+        };
+      };
+    });
+  };
+
   const handleImageUpload = async (e) => {
     if (isViewMode) return;
     const files = Array.from(e.target.files);
-    setImageFiles(prev => [...prev, ...files]);
-
+    
+    if (files.length === 0) return;
+    
+    setIsUploading(true);
+    setUploadProgress(0);
+    
     try {
-      const formData = new FormData();
-      files.forEach(file => formData.append('images', file));
-
+      // Compress images before upload
+      const compressPromises = files.map(file => compressImage(file));
+      const compressedFiles = await Promise.all(compressPromises);
+      
+      setImageFiles(prev => [...prev, ...compressedFiles]);
+      
       if (isEditMode) {
-        const response = await ProductService.uploadProductImages(id, formData);
+        const formData = new FormData();
+        compressedFiles.forEach(file => formData.append('images', file));
+        
+        // Create custom axios instance with upload progress
+        const response = await ProductService.uploadProductImages(id, formData, (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+          setUploadProgress(percentCompleted);
+        });
+        
         setFormData(prev => ({
           ...prev,
-          images: [...prev.images, ...response.product.images.map(img => img.url)]
+          images: response.product.images.map(img => ({ 
+            url: img.url, 
+            _id: img._id,
+            isMain: img.isMain || false
+          }))
         }));
+        
+        toast.success('Images uploaded successfully');
       } else {
-        const newImageUrls = files.map(file => URL.createObjectURL(file));
+        const newImageUrls = compressedFiles.map(file => ({ 
+          url: URL.createObjectURL(file), 
+          _id: null,
+          isMain: formData.images.length === 0 // First image is main by default
+        }));
+        
         setFormData(prev => ({
           ...prev,
           images: [...prev.images, ...newImageUrls]
         }));
       }
     } catch (err) {
-      console.error('Error uploading images:', err);
-      toast.error('Failed to upload images');
+      toast.error(`Failed to upload images: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
     }
   };
 
   const handleRemoveImage = async (index) => {
     if (isViewMode) return;
     const newImages = [...formData.images];
-    const imageId = formData.images[index]?._id;
+    const imageId = newImages[index]?._id;
     newImages.splice(index, 1);
-
-    const newImageFiles = [...imageFiles];
-    if (index < newImageFiles.length) {
-      newImageFiles.splice(index, 1);
-    }
-
     setFormData(prev => ({ ...prev, images: newImages }));
-    setImageFiles(newImageFiles);
+    setImageFiles(prev => prev.filter((_, i) => i !== index));
 
     if (isEditMode && imageId) {
       try {
         await ProductService.deleteProductImage(id, imageId);
         toast.success('Image removed successfully');
       } catch (err) {
-        console.error('Error removing image:', err);
-        toast.error('Failed to remove image');
+        toast.error(`Failed to remove image: ${err.message}`);
       }
+    }
+  };
+
+  const handleSetMainImage = async (imageId) => {
+    if (isViewMode || !imageId) return;
+    
+    try {
+      const response = await ProductService.setMainProductImage(id, imageId);
+      
+      // Update the local state to reflect the change
+      const updatedImages = formData.images.map(img => ({
+        ...img,
+        isMain: img._id === imageId
+      }));
+      
+      setFormData(prev => ({
+        ...prev,
+        images: updatedImages
+      }));
+      
+      toast.success('Main image updated successfully');
+    } catch (err) {
+      toast.error(`Failed to set main image: ${err.message}`);
     }
   };
 
   const validateForm = () => {
     const newErrors = {};
+    
+    // Basic validation
     if (!formData.name) newErrors.name = 'Product name is required';
     if (!formData.sku) newErrors.sku = 'SKU is required';
     if (!formData.price) newErrors.price = 'Price is required';
+    else if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 0) {
+      newErrors.price = 'Price must be a valid positive number';
+    }
+    
     if (!formData.stock) newErrors.stock = 'Stock quantity is required';
+    else if (isNaN(parseInt(formData.stock)) || parseInt(formData.stock) < 0) {
+      newErrors.stock = 'Stock must be a valid positive number';
+    }
+    
     if (!formData.categoryId) newErrors.category = 'Category is required';
+    
+    // Validate variants
+    if (formData.variants.length > 0) {
+      const variantNames = new Set();
+      const variantErrors = [];
+      
+      formData.variants.forEach((variant, index) => {
+        if (variantNames.has(variant.size)) {
+          variantErrors.push(`Duplicate variant name: ${variant.size}`);
+        }
+        variantNames.add(variant.size);
+        
+        if (isNaN(parseFloat(variant.price)) || parseFloat(variant.price) < 0) {
+          variantErrors.push(`Variant #${index + 1}: Price must be a valid positive number`);
+        }
+        
+        if (isNaN(parseInt(variant.stock)) || parseInt(variant.stock) < 0) {
+          variantErrors.push(`Variant #${index + 1}: Stock must be a valid positive number`);
+        }
+      });
+      
+      if (variantErrors.length > 0) {
+        newErrors.variants = variantErrors;
+      }
+    }
+    
+    // Validate images
+    if (formData.images.length === 0 && imageFiles.length === 0) {
+      newErrors.images = 'At least one product image is required';
+    }
+    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -218,22 +346,27 @@ const ProductFormPage = () => {
           variants: formData.variants.map(variant => ({
             size: variant.size,
             priceAdjustment: parseFloat(variant.price) - parseFloat(formData.price),
-            stockQuantity: parseInt(variant.stock),
-            sku: `${formData.sku}-${variant.size}`
+            stockQuantity: parseInt(variant.stock)
           }))
         };
 
+        let response;
         if (isEditMode) {
-          await ProductService.updateProduct(id, payload);
+          response = await ProductService.updateProduct(id, payload);
           toast.success('Product updated successfully');
         } else {
-          await ProductService.createProduct(payload);
+          response = await ProductService.createProduct(payload);
+          if (imageFiles.length > 0) {
+            const formData = new FormData();
+            imageFiles.forEach(file => formData.append('images', file));
+            console.log('res', response)
+            await ProductService.uploadProductImages(response.data.product._id, formData);
+          }
           toast.success('Product created successfully');
         }
         navigate('/admin/products');
       } catch (err) {
-        console.error('Error submitting product:', err);
-        toast.error('Failed to save product');
+        toast.error(err.toString());
       }
     }
   };
@@ -246,8 +379,7 @@ const ProductFormPage = () => {
         toast.success('Product deleted successfully');
         navigate('/admin/products');
       } catch (err) {
-        console.error('Error deleting product:', err);
-        toast.error('Failed to delete product');
+        toast.error(err.message);
       }
     }
   };
@@ -359,94 +491,83 @@ const ProductFormPage = () => {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                <label htmlFor="sku" className="block text-sm font-medium text-slate-900 mb-1">
-                  SKU*
-                </label>
-                {isViewMode ? (
-                  <p className="text-slate-900">{formData.sku || 'N/A'}</p>
-                ) : (
-                  <div className="flex-col gap-3">
-                    <input
-                      type="text"
-                      id="sku"
-                      name="sku"
-                      value={formData.sku}
-                      onChange={handleChange}
-                      className={`flex-1 mb-2 px-4 py-2 border ${errors.sku ? 'border-red-300' : 'border-slate-200'} rounded-md focus:outline-none focus:ring-2 focus:ring-slate-900/10`}
-                      placeholder="Enter SKU or generate"
-                      disabled={isEditMode} // Disable in edit mode to prevent SKU changes
-                    />
-                    {isCreateMode && (
-                      <Button
-                        type="button"
-                        onClick={async () => {
-                          setIsGenerating(true); // Set generating state
-                          try {
-                            const categoryId = formData.categoryId;
-                            if (!categoryId) {
-                              toast.error('Select a category first');
-                              return;
-                            }
-                            const response = await ProductService.getAllCategories();
-                            const category = response.data.find(cat => cat.id === categoryId);
-                            const prefix = {
-                              'Candles': 'CAN',
-                              'Room Sprays': 'RSP',
-                              'Diffusers': 'DIF',
-                              'Gift Sets': 'GFT'
-                            }[category?.name] || 'PRD';
-                            const products = await ProductService.getAllProducts({ category: categoryId });
-                            const lastNumber = products.data
-                              .filter(p => p.sku.startsWith(`${prefix}-`))
-                              .reduce((max, p) => {
-                                const num = parseInt(p.sku.split('-')[1]) || 0;
-                                return Math.max(max, num);
-                              }, 0);
-                            setFormData(prev => ({ ...prev, sku: `${prefix}-${String(lastNumber + 1).padStart(3, '0')}` }));
-                          } catch (err) {
-                            console.error('Error generating SKU:', err);
-                            toast.error('Failed to generate SKU');
-                          } finally {
-                            setIsGenerating(false); // Revert generating state
-                          }
-                        }}
-                        className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800"
-                        disabled={isGenerating} // Disable button while generating
-                      >
-                        {isGenerating ? (
-                          <>
-                            <svg
-                              className="animate-spin h-5 w-5 mr-2 text-white"
-                              xmlns="http://www.w3.org/2000/svg"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                            >
-                              <circle
-                                className="opacity-25"
-                                cx="12"
-                                cy="12"
-                                r="10"
-                                stroke="currentColor"
-                                strokeWidth="4"
-                              ></circle>
-                              <path
-                                className="opacity-75"
-                                fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                              ></path>
-                            </svg>
-                            Generating...
-                          </>
-                        ) : (
-                          'Generate SKU'
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {errors.sku && <p className="mt-1 text-sm text-red-600">{errors.sku}</p>}
-                  </div>
+                    <div>
+                      <label htmlFor="sku" className="block text-sm font-medium text-slate-900 mb-1">
+                        SKU*
+                      </label>
+                      {isViewMode ? (
+                        <p className="text-slate-900">{formData.sku || 'N/A'}</p>
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          <input
+                            type="text"
+                            id="sku"
+                            name="sku"
+                            value={formData.sku}
+                            onChange={handleChange}
+                            className={`flex-1 mb-2 px-4 py-2 border ${errors.sku ? 'border-red-300' : 'border-slate-200'} rounded-md focus:outline-none focus:ring-2 focus:ring-slate-900/10`}
+                            placeholder="Enter SKU or generate"
+                            disabled={isEditMode}
+                          />
+                          {isCreateMode && (
+                           <Button
+                            type="button"
+                            onClick={async () => {
+                              setIsGenerating(true);
+                              try {
+                                if (!formData.categoryId) {
+                                  toast.error('Select a category first');
+                                  return;
+                                }
+                                const response = await ProductService.generateSKU(formData.categoryId);
+                                const sku = response.data?.sku; // Extract sku from response.data
+                                if (!sku) {
+                                  throw new Error('No SKU returned from server');
+                                }
+                                setFormData(prev => ({ ...prev, sku }));
+                              } catch (err) {
+                                
+                                toast.error(err.toString() || 'Failed to generate SKU');
+                              } finally {
+                                setIsGenerating(false);
+                              }
+                            }}
+                            className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800"
+                            disabled={isGenerating}
+                          >
+                            {isGenerating ? (
+                              <>
+                                <svg
+                                  className="animate-spin h-5 w-5 mr-2 text-white"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <circle
+                                    className="opacity-25"
+                                    cx="12"
+                                    cy="12"
+                                    r="10"
+                                    stroke="currentColor"
+                                    strokeWidth="4"
+                                  ></circle>
+                                  <path
+                                    className="opacity-75"
+                                    fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                  ></path>
+                                </svg>
+                                Generating...
+                              </>
+                            ) : (
+                              'Generate SKU'
+                            )}
+                          </Button>
+                          )}
+                        </div>
+                      )}
+                      {errors.sku && <p className="mt-1 text-sm text-red-600">{errors.sku}</p>}
+                    </div>
                     <div>
                       <label htmlFor="categoryId" className="block text-sm font-medium text-slate-900 mb-1">
                         Category*
@@ -630,6 +751,20 @@ const ProductFormPage = () => {
                   <CardDescription>Size or scent variants with specific pricing</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {errors.variants && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
+                      <p className="font-medium">Please fix the following issues:</p>
+                      <ul className="list-disc pl-5 mt-1 text-sm">
+                        {Array.isArray(errors.variants) ? (
+                          errors.variants.map((error, index) => (
+                            <li key={index}>{error}</li>
+                          ))
+                        ) : (
+                          <li>{errors.variants}</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
@@ -726,50 +861,102 @@ const ProductFormPage = () => {
                   <CardDescription>High-quality product images</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {errors.images && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
+                      <p>{errors.images}</p>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-4">
                     {formData.images.map((image, index) => (
                       <div key={index} className="relative group">
-                        <div className="aspect-square bg-slate-100 rounded-md overflow-hidden">
+                        <div className={`aspect-square bg-slate-100 rounded-md overflow-hidden ${image.isMain ? 'ring-2 ring-blue-500' : ''}`}>
                           <img
-                            src={image}
+                            src={image.url}
                             alt={`Product ${index + 1}`}
                             className="w-full h-full object-cover"
                           />
+                          {image.isMain && (
+                            <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-md">
+                              Main Image
+                            </div>
+                          )}
                         </div>
                         {!isViewMode && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveImage(index)}
-                            className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md opacity-0 group-hover:opacity-100"
-                          >
-                            <X size={14} />
-                          </button>
+                          <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100">
+                            {!image.isMain && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetMainImage(image._id)}
+                                className="p-1 bg-blue-500 text-white rounded-full shadow-md hover:bg-blue-600"
+                                title="Set as main image"
+                              >
+                                <Eye size={14} />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(index)}
+                              className="p-1 bg-white rounded-full shadow-md hover:bg-red-50"
+                              title="Remove image"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}
 
                     {!isViewMode && formData.images.length < 4 && (
-                      <label className="aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-md flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100">
-                        <Upload size={24} className="text-slate-400 mb-2" />
-                        <span className="text-sm text-slate-500">Upload Image</span>
+                      <label className="aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-md flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 relative">
+                        {isUploading ? (
+                          <div className="flex flex-col items-center justify-center w-full h-full">
+                            <div className="w-16 h-16 mb-2 relative">
+                              <svg className="w-full h-full" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="16" fill="none" className="stroke-slate-200" strokeWidth="2"></circle>
+                                <circle 
+                                  cx="18" 
+                                  cy="18" 
+                                  r="16" 
+                                  fill="none" 
+                                  className="stroke-blue-500" 
+                                  strokeWidth="2" 
+                                  strokeDasharray="100" 
+                                  strokeDashoffset={100 - uploadProgress}
+                                  transform="rotate(-90 18 18)"
+                                ></circle>
+                              </svg>
+                              <div className="absolute inset-0 flex items-center justify-center text-sm font-medium text-blue-500">
+                                {uploadProgress}%
+                              </div>
+                            </div>
+                            <span className="text-sm text-slate-500">Uploading...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload size={24} className="text-slate-400 mb-2" />
+                            <span className="text-sm text-slate-500">Upload Image</span>
+                            <span className="text-xs text-slate-400 mt-1">Images will be compressed</span>
+                          </>
+                        )}
                         <input
                           type="file"
                           accept="image/*"
                           onChange={handleImageUpload}
                           className="hidden"
                           multiple
+                          disabled={isUploading}
                         />
                       </label>
                     )}
                   </div>
 
-                  {formData.images.length === 0 && (
-                    <div className="text-center py-8">
-                      <Image size={48} className="mx-auto text-slate-300 mb-2" />
-                      <p className="text-slate-500">No images uploaded yet</p>
-                      <p className="text-sm text-slate-400 mt-1">Upload high-quality product images</p>
-                    </div>
-                  )}
+                {formData.images.length === 0 && (
+                <div className="text-center py-8">
+                  <ImageIcon size={48} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-slate-500">No images uploaded yet</p>
+                  <p className="text-sm text-slate-400 mt-1">Upload high-quality product images</p>
+                </div>
+              )}
                 </CardContent>
               </Card>
 

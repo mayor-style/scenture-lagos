@@ -9,7 +9,6 @@ import { useCart } from '../contexts/CartContext';
 const CartPage = () => {
   const { cart, loading, updateCartItem, removeFromCart } = useCart();
 
-  // Enhanced animation variants
   const fadeIn = {
     hidden: { opacity: 0, y: 30 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] } },
@@ -36,7 +35,6 @@ const CartPage = () => {
     visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: "easeOut" } },
   };
 
-  // Handle loading state
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white">
@@ -48,7 +46,6 @@ const CartPage = () => {
     );
   }
 
-  // Enhanced empty cart state
   if (!cart || !cart.items || cart.items.length === 0) {
     return (
       <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-gray-50 via-white to-gray-50">
@@ -83,20 +80,17 @@ const CartPage = () => {
     );
   }
 
-  // Update quantity handler
   const handleUpdateQuantity = (itemId, newQuantity) => {
     if (newQuantity < 1) return;
     updateCartItem(itemId, newQuantity);
   };
 
-  // Remove item handler
   const handleRemoveItem = (itemId) => {
     removeFromCart(itemId);
   };
 
   return (
     <div className="bg-gradient-to-br from-gray-50 via-white to-gray-50 min-h-screen">
-      {/* Enhanced header with better mobile spacing */}
       <div className="pt-8 sm:pt-12 lg:pt-16 pb-8 sm:pb-12">
         <div className="container max-w-7xl px-4 sm:px-6 lg:px-8">
           <motion.div 
@@ -117,7 +111,6 @@ const CartPage = () => {
 
       <div className="container max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
-          {/* Cart Items - Enhanced mobile layout */}
           <motion.div 
             initial="hidden"
             animate="visible"
@@ -125,7 +118,6 @@ const CartPage = () => {
             className="xl:col-span-2"
           >
             <div className="bg-white rounded-3xl shadow-sm border border-gray-100/50 overflow-hidden backdrop-blur-sm">
-              {/* Header with better mobile layout */}
               <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b border-gray-100/50 bg-gradient-to-r from-gray-50/50 to-gray-50/30">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
                   <div>
@@ -144,7 +136,6 @@ const CartPage = () => {
                 </div>
               </div>
 
-              {/* Cart Item List - Optimized for mobile */}
               <div className="divide-y divide-gray-100/50">
                 {cart.items.map((item, index) => (
                   <motion.div 
@@ -154,16 +145,15 @@ const CartPage = () => {
                     className="p-4 sm:p-6 lg:p-8 hover:bg-gray-50/30 transition-all duration-300 group"
                   >
                     <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                      {/* Product Image - Responsive sizing */}
                       <div className="w-full sm:w-24 lg:w-32 h-32 sm:h-24 lg:h-32 bg-gradient-to-br from-gray-100 to-gray-50 rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100/50 shadow-sm">
                         <img 
-                          src={item.product.image} 
+                          src={item.product.image || '/placeholder-image.jpg'} 
                           alt={item.product.name} 
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                          onError={(e) => { e.target.src = '/placeholder-image.jpg'; }}
                         />
                       </div>
 
-                      {/* Product Details - Mobile optimized */}
                       <div className="flex-grow space-y-4">
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
                           <div className="flex-grow">
@@ -182,9 +172,7 @@ const CartPage = () => {
                           </div>
                         </div>
 
-                        {/* Mobile-first controls layout */}
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                          {/* Quantity Controls - Enhanced mobile design */}
                           <div className="flex items-center bg-gradient-to-r from-gray-50 to-gray-50/70 rounded-2xl border border-gray-200/50 overflow-hidden shadow-sm">
                             <button 
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
@@ -204,7 +192,6 @@ const CartPage = () => {
                             </button>
                           </div>
 
-                          {/* Subtotal and Remove - Mobile optimized */}
                           <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4 sm:gap-6">
                             <div className="text-left sm:text-right">
                               <p className="text-xs sm:text-sm text-secondary/60 font-medium">Subtotal</p>
@@ -213,7 +200,6 @@ const CartPage = () => {
                               </p>
                             </div>
                             
-                            {/* Remove Button - Enhanced styling */}
                             <button 
                               onClick={() => handleRemoveItem(item.id)}
                               className="p-2.5 text-secondary/40 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200 flex items-center justify-center group/remove border border-transparent hover:border-red-100"
@@ -231,7 +217,6 @@ const CartPage = () => {
             </div>
           </motion.div>
 
-          {/* Order Summary - Enhanced mobile design */}
           <motion.div
             initial="hidden"
             animate="visible"
@@ -244,7 +229,6 @@ const CartPage = () => {
               </div>
               
               <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
-                {/* Summary breakdown */}
                 <div className="space-y-4 sm:space-y-5">
                   <div className="flex justify-between items-center py-2">
                     <span className="text-secondary/70 font-medium">Subtotal</span>
@@ -275,7 +259,6 @@ const CartPage = () => {
                   )}
                 </div>
 
-                {/* Total and checkout */}
                 <div className="border-t border-gray-200/50 pt-6 sm:pt-8">
                   <div className="flex justify-between items-center mb-6 sm:mb-8">
                     <span className="font-bold text-lg sm:text-xl text-secondary">Total</span>
@@ -292,7 +275,6 @@ const CartPage = () => {
                   </Button>
                 </div>
 
-                {/* Enhanced payment methods */}
                 <div className="pt-6 sm:pt-8 border-t border-gray-200/50">
                   <p className="text-xs sm:text-sm text-secondary/60 mb-4 font-semibold">Secure Payment</p>
                   <div className="flex gap-2 sm:gap-3 mb-4">

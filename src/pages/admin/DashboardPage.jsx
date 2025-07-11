@@ -3,12 +3,8 @@ import { Helmet } from 'react-helmet-async';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { formatPrice, formatDate } from '../../lib/utils';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import { 
-  Package, ShoppingCart, DollarSign, Users, TrendingUp, Clock, Plus, RefreshCw, Calendar, Loader2, Bell
-} from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Package, ShoppingCart, DollarSign, Users, TrendingUp, Clock, Plus, RefreshCw, Calendar, Loader2, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import DashboardService from '../../services/admin/dashboard.service';
 import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
@@ -27,17 +23,15 @@ const DashboardPage = () => {
     salesGrowth: 0,
     ordersGrowth: 0,
     customersGrowth: 0,
-    lowStockProducts: 0, // ADDED: To display low stock products
-    lastUpdated: ''
+    lowStockProducts: 0,
+    lastUpdated: '',
   });
   const [salesData, setSalesData] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [activityFeed, setActivityFeed] = useState([]);
-  const [filteredActivityFeed, setFilteredActivityFeed] = useState([]);
-  const [activityFilter, setActivityFilter] = useState('all');
   const [isPolling, setIsPolling] = useState(false);
-const [pollingInterval, setPollingInterval] = useState(null);
-  
+  const [pollingInterval, setPollingInterval] = useState(null);
+
   // Loading and error states
   const [loading, setLoading] = useState(true);
   const [salesLoading, setSalesLoading] = useState(true);
@@ -45,230 +39,136 @@ const [pollingInterval, setPollingInterval] = useState(null);
   const [activityLoading, setActivityLoading] = useState(true);
   const [error, setError] = useState(null);
   const [salesPeriod, setSalesPeriod] = useState('week');
-  
+  const [activityFilter, setActivityFilter] = useState('all');
+
   // Fetch summary data
   const fetchSummaryData = async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const response = await DashboardService.getDashboardSummary();
-      
-      if (response && response.data) {
-        const { metrics } = response.data;
-        setSummary({
-          totalSales: metrics.totalSales || 0,
-          totalOrders: metrics.totalOrders || 0,
-          inventoryValue: metrics.inventoryValue || 0,
-          newCustomers: metrics.newCustomers || 0,
-          salesGrowth: metrics.salesGrowth || 0, // MODIFIED: Use backend-provided growth
-          ordersGrowth: metrics.ordersGrowth || 0,
-          customersGrowth: metrics.customersGrowth || 0,
-          lowStockProducts: metrics.lowStockProducts || 0, // ADDED
-          lastUpdated: new Date().toISOString()
-        });
-      }
-      
+      const { metrics } = response.data;
+      setSummary({
+        totalSales: metrics.totalSales || 0,
+        totalOrders: metrics.totalOrders || 0,
+        inventoryValue: metrics.inventoryValue || 0,
+        newCustomers: metrics.newCustomers || 0,
+        salesGrowth: metrics.salesGrowth || 0,
+        ordersGrowth: metrics.ordersGrowth || 0,
+        customersGrowth: metrics.customersGrowth || 0,
+        lowStockProducts: metrics.lowStockProducts || 0,
+        lastUpdated: new Date().toISOString(),
+      });
       setLoading(false);
     } catch (err) {
       console.error('Error fetching summary data:', err.response?.status || err.message);
-      setError(err);
+      setError(err.response?.data?.message || 'Failed to fetch summary data');
       setLoading(false);
-      
-      // Updated fallback data for fragrances context
-      if (process.env.NODE_ENV === 'development') {
-        setSummary({
-          totalSales: 250000, // Updated to reflect realistic fragrance sales
-          totalOrders: 65,
-          inventoryValue: 500000,
-          newCustomers: 25,
-          salesGrowth: 8.7,
-          ordersGrowth: 5.4,
-          customersGrowth: 10.2,
-          lowStockProducts: 3, // ADDED
-          lastUpdated: new Date().toISOString()
-        });
-      }
     }
   };
-  
+
   // Fetch sales data for chart
   const fetchSalesData = async (period = 'week', startDate, endDate) => {
     setSalesLoading(true);
-    
+
     try {
       const salesResponse = await DashboardService.getSalesData({ period, startDate, endDate });
-      
-      if (salesResponse && Array.isArray(salesResponse.data)) {
-        setSalesData(salesResponse.data);
-      } else {
-        setSalesData([]);
-      }
-      
+      setSalesData(salesResponse.data || []);
       setSalesLoading(false);
     } catch (err) {
       console.error('Error fetching sales data:', err.response?.status || err.message);
+      setSalesData([]);
       setSalesLoading(false);
-      
-      // Updated fallback data for fragrances context
-      if (process.env.NODE_ENV === 'development') {
-        const sampleData = [
-          { name: 'Mon', sales: 12000 }, // Updated to reflect fragrance sales
-          { name: 'Tue', sales: 9500 },
-          { name: 'Wed', sales: 15000 },
-          { name: 'Thu', sales: 8000 },
-          { name: 'Fri', sales: 11000 },
-          { name: 'Sat', sales: 18000 },
-          { name: 'Sun', sales: 13000 },
-        ];
-        setSalesData(sampleData);
-      }
     }
   };
-  
+
   // Fetch recent orders
   const fetchRecentOrders = async () => {
     setOrdersLoading(true);
-    
+
     try {
       const response = await DashboardService.getRecentOrders({ limit: 5 });
-      
-      if (response && response.data && response.data.orders) {
-        const formattedOrders = response.data.orders.map(order => ({
-          id: order.orderNumber,
-          customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
-          date: order.createdAt,
-          total: order.totalAmount,
-          status: order.status
-        }));
-        setRecentOrders(formattedOrders);
-      } else {
-        setRecentOrders([]);
-      }
-      
+      const formattedOrders = response.data.orders.map((order) => ({
+        id: order.orderNumber,
+        customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
+        date: order.createdAt,
+        total: order.totalAmount,
+        status: order.status,
+      }));
+      setRecentOrders(formattedOrders);
       setOrdersLoading(false);
     } catch (err) {
       console.error('Error fetching recent orders:', err.response?.status || err.message);
+      setRecentOrders([]);
       setOrdersLoading(false);
-      
-      // Updated fallback data for fragrances context
-      if (process.env.NODE_ENV === 'development') {
-        const sampleOrders = [
-          { id: 'SCL-20250707-0001', customer: 'Aisha Okeke', date: '2025-07-06', total: 18500, status: 'Delivered' },
-          { id: 'SCL-20250707-0002', customer: 'Chinedu Eze', date: '2025-07-06', total: 9200, status: 'Processing' },
-          { id: 'SCL-20250707-0003', customer: 'Fatima Bello', date: '2025-07-05', total: 6700, status: 'Pending' },
-          { id: 'SCL-20250707-0004', customer: 'Tunde Adebayo', date: '2025-07-05', total: 22000, status: 'Shipped' },
-          { id: 'SCL-20250707-0005', customer: 'Ngozi Obi', date: '2025-07-04', total: 4500, status: 'Delivered' },
-        ];
-        setRecentOrders(sampleOrders);
-      }
     }
   };
-  
+
   // Fetch activity feed
   const fetchActivityFeed = async () => {
     setActivityLoading(true);
-    
+
     try {
-    const response = await DashboardService.getActivityFeed({ limit: 10, type: activityFilter });
-    if (response && response.data && response.data.activities) {
-      const formattedActivities = response.data.activities.map(activity => ({
-        description: activity.message,
-        timestamp: activity.timestamp,
-        type: activity.type || 'general'
-      }));
-      setActivityFeed(formattedActivities);
-    } else {
-      setActivityFeed([]);
-    }
-    setActivityLoading(false);
+      const response = await DashboardService.getActivityFeed({ limit: 10, type: activityFilter });
+      setActivityFeed(response.data.activities || []);
+      setActivityLoading(false);
     } catch (err) {
       console.error('Error fetching activity feed:', err.response?.status || err.message);
+      setActivityFeed([]);
       setActivityLoading(false);
-      
-      // Updated fallback data for fragrances context
-      if (process.env.NODE_ENV === 'development') {
-        const sampleActivities = [
-          { 
-            description: 'New product added: Rose Diffuser', 
-            timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-            type: 'product'
-          },
-          { 
-            description: 'Order #SCL-20250707-0006 status changed to Shipped', 
-            timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-            type: 'order'
-          },
-          { 
-            description: 'Inventory updated for Lavender Candle', 
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-            type: 'inventory'
-          },
-          { 
-            description: 'New customer registered: Amaka Igwe', 
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(),
-            type: 'customer'
-          },
-          { 
-            description: 'Price updated for Oud Fragrance', 
-            timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(),
-            type: 'product'
-          },
-        ];
-        setActivityFeed(sampleActivities);
+    }
+  };
+
+  // Fetch all dashboard data with retry mechanism
+  const fetchDashboardData = async (retryCount = 0) => {
+    const maxRetries = 3;
+    try {
+      const endDate = new Date();
+      const startDate = new Date();
+
+      switch (salesPeriod) {
+        case 'week':
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case 'month':
+          startDate.setMonth(startDate.getMonth() - 1);
+          break;
+        case 'year':
+          startDate.setFullYear(startDate.getFullYear() - 1);
+          break;
+        default:
+          startDate.setDate(startDate.getDate() - 7);
+      }
+
+      const formattedStartDate = startDate.toISOString().split('T')[0];
+      const formattedEndDate = endDate.toISOString().split('T')[0];
+
+      await Promise.all([
+        fetchSummaryData(),
+        fetchSalesData(salesPeriod, formattedStartDate, formattedEndDate),
+        fetchRecentOrders(),
+        fetchActivityFeed(),
+      ]);
+
+      toast.success('Dashboard data refreshed');
+    } catch (err) {
+      if (retryCount < maxRetries) {
+        toast(`Retrying ${retryCount + 1} of ${maxRetries}...`, { icon: '🔄' });
+        setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
+      } else {
+        setError(err.response?.data?.message || 'Failed to refresh dashboard data');
+        toast.error(err.response?.data?.message || 'Failed to refresh dashboard data');
       }
     }
   };
-  
-  // Fetch all dashboard data with retry mechanism
-const fetchDashboardData = async (retryCount = 0) => {
-  const maxRetries = 3;
-  try {
-    const endDate = new Date();
-    const startDate = new Date();
-    
-    switch (salesPeriod) {
-      case 'week':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      case 'year':
-        startDate.setFullYear(startDate.getFullYear() - 1);
-        break;
-      default:
-        startDate.setDate(startDate.getDate() - 7);
-    }
-    
-    const formattedStartDate = startDate.toISOString().split('T')[0];
-    const formattedEndDate = endDate.toISOString().split('T')[0];
-    
-    await Promise.all([
-      fetchSummaryData(),
-      fetchSalesData(salesPeriod, formattedStartDate, formattedEndDate),
-      fetchRecentOrders(),
-      fetchActivityFeed()
-    ]);
-    
-    toast.success('Dashboard data refreshed');
-  } catch (err) {
-    if (retryCount < maxRetries) {
-      toast(`Retrying ${retryCount + 1} of ${maxRetries}...`, { icon: '🔄' });
-      setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
-    } else {
-      setError(err);
-      toast.error('Failed to refresh dashboard data');
-    }
-  }
-};
-  
+
   // Handle sales period change
   const handlePeriodChange = (period) => {
     setSalesPeriod(period);
     const endDate = new Date();
     const startDate = new Date();
-    
+
     switch (period) {
       case 'week':
         startDate.setDate(startDate.getDate() - 7);
@@ -282,17 +182,10 @@ const fetchDashboardData = async (retryCount = 0) => {
       default:
         startDate.setDate(startDate.getDate() - 7);
     }
-    
+
     const formattedStartDate = startDate.toISOString().split('T')[0];
     const formattedEndDate = endDate.toISOString().split('T')[0];
     fetchSalesData(period, formattedStartDate, formattedEndDate);
-  };
-  
-  // Filter activity feed
-  const filterActivityFeed = (activities, filterType) => {
-    if (!activities || !Array.isArray(activities) || activities.length === 0) return [];
-    if (filterType === 'all') return activities;
-    return activities.filter(activity => activity.type === filterType);
   };
 
   // Get activity counts
@@ -300,41 +193,38 @@ const fetchDashboardData = async (retryCount = 0) => {
     if (!Array.isArray(activities) || activities.length === 0) {
       return { product: 0, order: 0, inventory: 0, customer: 0, general: 0 };
     }
-
     return activities.reduce((counts, activity) => {
-      const type = activity.type || 'general'; // MODIFIED: Handle undefined types
+      const type = activity.type || 'general';
       counts[type] = (counts[type] || 0) + 1;
       return counts;
     }, { product: 0, order: 0, inventory: 0, customer: 0, general: 0 });
   };
 
-  // Update filtered activity feed
-  useEffect(() => {
-    setFilteredActivityFeed(activityFeed);
-  }, [activityFeed]);
-
   // Fetch data on mount
   useEffect(() => {
-   
-      fetchDashboardData();
-    
+    fetchDashboardData();
   }, []);
 
+  // Update activity feed when filter changes
+  useEffect(() => {
+    fetchActivityFeed();
+  }, [activityFilter]);
+
   // Clean up polling on component unmount
-useEffect(() => {
-  return () => {
-    if (pollingInterval) {
-      clearInterval(pollingInterval);
-    }
-  };
-}, [pollingInterval]);
+  useEffect(() => {
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   return (
     <>
       <Helmet>
         <title>Dashboard | Scenture Lagos Admin</title>
       </Helmet>
-      
+
       <div className="space-y-8 px-0">
         <div className="flex flex-col space-y-6 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
@@ -346,13 +236,13 @@ useEffect(() => {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3">
-            <Button 
-              variant="outline" 
-              className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm" 
+            <Button
+              variant="outline"
+              className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm"
               onClick={() => fetchDashboardData()}
               disabled={loading || salesLoading || ordersLoading || activityLoading}
             >
-              {(loading || salesLoading || ordersLoading || activityLoading) ? (
+              {loading || salesLoading || ordersLoading || activityLoading ? (
                 <>
                   <Loader2 size={16} className="mr-2 animate-spin" />
                   <span className="text-sm font-medium">Refreshing...</span>
@@ -364,15 +254,15 @@ useEffect(() => {
                 </>
               )}
             </Button>
-            <Button 
-              variant="default" 
+            <Button
+              variant="default"
               className="flex items-center justify-center h-11 px-6 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all duration-200"
               onClick={() => navigate('/admin/products/new')}
             >
               <Plus size={16} className="mr-2" />
               <span className="text-sm font-medium">New Product</span>
             </Button>
-             <Button
+            <Button
               variant="outline"
               className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm"
               onClick={() => {
@@ -382,7 +272,7 @@ useEffect(() => {
                   setIsPolling(false);
                   toast.success('Real-time updates disabled');
                 } else {
-                  const interval = setInterval(() => fetchDashboardData(), 30000); // Poll every 30 seconds
+                  const interval = setInterval(() => fetchDashboardData(), 60000); // Poll every 60 seconds
                   setPollingInterval(interval);
                   setIsPolling(true);
                   toast.success('Real-time updates enabled');
@@ -407,43 +297,42 @@ useEffect(() => {
 
         {error && (
           <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/50 rounded-2xl p-6">
-            <ErrorState 
-              title="Failed to load dashboard data" 
-              message="There was an error loading the dashboard data. Please try again or check your connection." 
+            <ErrorState
+              title="Failed to load dashboard data"
+              message={error}
               onRetry={() => fetchDashboardData()}
               className="py-0"
             />
           </div>
         )}
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
 
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-4 sm:gap-6">
           <Card className="group hover:shadow-xl hover:shadow-red-500/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-red-50/50 backdrop-blur-sm rounded-xl">
-          <CardContent className="p-6 sm:p-8">
-            <LoadingOverlay loading={loading}>
-              <div className="flex items-center justify-between">
-                <div className="space-y-3">
-                  <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Low Stock Alerts</p>
-                  <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.lowStockProducts}</h3>
-                  <p className="text-xs text-secondary/60 flex items-center">
-                    <Package size={14} className="mr-1.5" />
-                    Products below threshold
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
-                    onClick={() => navigate('/admin/inventory?filter=low-stock')}
-                  >
-                    View Low Stock
-                  </Button>
+            <CardContent className="p-6 sm:p-8">
+              <LoadingOverlay loading={loading}>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-3">
+                    <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Low Stock Alerts</p>
+                    <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.lowStockProducts}</h3>
+                    <p className="text-xs text-secondary/60 flex items-center">
+                      <Package size={14} className="mr-1.5" />
+                      Products below threshold
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
+                      onClick={() => navigate('/admin/inventory?filter=low-stock')}
+                    >
+                      View Low Stock
+                    </Button>
+                  </div>
+                  <div className="w-14 h-14 bg-gradient-to-br from-red-500/20 to-red-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
+                    <Package size={24} className="text-red-600" />
+                  </div>
                 </div>
-                <div className="w-14 h-14 bg-gradient-to-br from-red-500/20 to-red-500/10 rounded-2xl flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
-                  <Package size={24} className="text-red-600" />
-                </div>
-              </div>
-            </LoadingOverlay>
-          </CardContent>
+              </LoadingOverlay>
+            </CardContent>
           </Card>
 
           <Card className="group hover:shadow-xl hover:shadow-primary/10 transition-all duration-300 border-0 bg-gradient-to-br from-white to-slate-50/50 backdrop-blur-sm rounded-xl">
@@ -454,7 +343,7 @@ useEffect(() => {
                     <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Total Sales</p>
                     <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{formatPrice(summary.totalSales)}</h3>
                     <p className={`text-xs flex items-center ${summary.salesGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      <TrendingUp size={14} className="mr-1.5" /> 
+                      <TrendingUp size={14} className="mr-1.5" />
                       {summary.salesGrowth >= 0 ? '+' : ''}{summary.salesGrowth}% from last period
                     </p>
                   </div>
@@ -474,7 +363,7 @@ useEffect(() => {
                     <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Total Orders</p>
                     <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.totalOrders}</h3>
                     <p className={`text-xs flex items-center ${summary.ordersGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      <TrendingUp size={14} className="mr-1.5" /> 
+                      <TrendingUp size={14} className="mr-1.5" />
                       {summary.ordersGrowth >= 0 ? '+' : ''}{summary.ordersGrowth}% from last period
                     </p>
                   </div>
@@ -494,7 +383,7 @@ useEffect(() => {
                     <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">Inventory Value</p>
                     <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{formatPrice(summary.inventoryValue)}</h3>
                     <p className="text-xs text-secondary/60 flex items-center">
-                      <Clock size={14} className="mr-1.5" /> 
+                      <Clock size={14} className="mr-1.5" />
                       {summary.lastUpdated ? `Updated ${formatDate(summary.lastUpdated, { format: 'short' })}` : 'Recently updated'}
                     </p>
                   </div>
@@ -514,7 +403,7 @@ useEffect(() => {
                     <p className="text-sm font-medium text-secondary/60 tracking-wide uppercase">New Customers</p>
                     <h3 className="text-2xl sm:text-3xl font-heading font-light text-secondary">{summary.newCustomers}</h3>
                     <p className={`text-xs flex items-center ${summary.customersGrowth >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                      <TrendingUp size={14} className="mr-1.5" /> 
+                      <TrendingUp size={14} className="mr-1.5" />
                       {summary.customersGrowth >= 0 ? '+' : ''}{summary.customersGrowth}% from last period
                     </p>
                   </div>
@@ -536,8 +425,8 @@ useEffect(() => {
                   <CardDescription className="text-secondary/60">{salesLoading ? 'Loading...' : 'Sales performance over time'}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     className={`${salesPeriod === 'week' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                     onClick={() => handlePeriodChange('week')}
@@ -545,8 +434,8 @@ useEffect(() => {
                   >
                     Week
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     className={`${salesPeriod === 'month' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                     onClick={() => handlePeriodChange('month')}
@@ -554,8 +443,8 @@ useEffect(() => {
                   >
                     Month
                   </Button>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     size="sm"
                     className={`${salesPeriod === 'year' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                     onClick={() => handlePeriodChange('year')}
@@ -575,31 +464,27 @@ useEffect(() => {
                         <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                         <XAxis dataKey="name" stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
                         <YAxis stroke="#64748b" fontSize={12} tickLine={false} axisLine={false} />
-                        <Tooltip 
-                          contentStyle={{ 
-                            backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                            border: 'none', 
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                            border: 'none',
                             borderRadius: '12px',
                             boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-                            backdropFilter: 'blur(10px)'
+                            backdropFilter: 'blur(10px)',
                           }}
                         />
-                        <Bar 
-                          dataKey="sales" 
-                          fill="url(#salesGradient)" 
-                          radius={[8, 8, 0, 0]}
-                        />
+                        <Bar dataKey="sales" fill="url(#salesGradient)" radius={[8, 8, 0, 0]} />
                         <defs>
                           <linearGradient id="salesGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#E5D3C8" stopOpacity={0.8}/>
-                            <stop offset="95%" stopColor="#E5D3C8" stopOpacity={0.2}/>
+                            <stop offset="5%" stopColor="#E5D3C8" stopOpacity={0.8} />
+                            <stop offset="95%" stopColor="#E5D3C8" stopOpacity={0.2} />
                           </linearGradient>
                         </defs>
                       </BarChart>
                     </ResponsiveContainer>
                   ) : (
                     <div className="h-full flex items-center justify-center">
-                      <EmptyState 
+                      <EmptyState
                         icon={<Calendar className="h-12 w-12 text-secondary/30" />}
                         title="No sales data available"
                         description="There is no sales data for the selected period."
@@ -618,32 +503,32 @@ useEffect(() => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                <Button 
-                  variant="default" 
+                <Button
+                  variant="default"
                   className="w-full justify-start h-12 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary/80 shadow-md hover:shadow-lg transition-all duration-200"
                   onClick={() => navigate('/admin/products/new')}
                 >
                   <Plus size={18} className="mr-3" />
                   <span className="font-medium">Add New Product</span>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start h-12 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
                   onClick={() => navigate('/admin/orders?status=pending')}
                 >
                   <ShoppingCart size={18} className="mr-3" />
                   <span className="font-medium">View Pending Orders</span>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start h-12 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
                   onClick={() => navigate('/admin/inventory')}
                 >
                   <Package size={18} className="mr-3" />
                   <span className="font-medium">Update Inventory</span>
                 </Button>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start h-12 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
                   onClick={() => navigate('/admin/customers')}
                 >
@@ -662,8 +547,8 @@ useEffect(() => {
                 <CardTitle className="text-xl font-heading font-medium text-secondary">Recent Orders</CardTitle>
                 <CardDescription className="text-secondary/60">{ordersLoading ? 'Loading...' : 'Latest customer orders'}</CardDescription>
               </div>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 size="sm"
                 className="border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200"
                 onClick={() => navigate('/admin/orders')}
@@ -688,8 +573,8 @@ useEffect(() => {
                       </thead>
                       <tbody>
                         {recentOrders.map((order) => (
-                          <tr 
-                            key={order.id} 
+                          <tr
+                            key={order.id}
                             className="border-b border-slate-100/60 hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent cursor-pointer transition-all duration-200"
                             onClick={() => navigate(`/admin/orders/${order.id}`)}
                           >
@@ -698,12 +583,19 @@ useEffect(() => {
                             <td className="p-4 text-secondary/70 hidden sm:table-cell">{formatDate(order.date, { format: 'short' })}</td>
                             <td className="p-4 font-semibold text-secondary">{formatPrice(order.total)}</td>
                             <td className="p-4">
-                              <span className={`px-3 py-1.5 text-xs font-medium rounded-full ${
-                                order.status === 'Delivered' ? 'bg-emerald-100 text-emerald-700' :
-                                order.status === 'Processing' ? 'bg-blue-100 text-blue-700' :
-                                order.status === 'Pending' ? 'bg-amber-100 text-amber-700' :
-                                'bg-purple-100 text-purple-700'
-                              }`}>{order.status}</span>
+                              <span
+                                className={`px-3 py-1.5 text-xs font-medium rounded-full ${
+                                  order.status === 'Delivered'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : order.status === 'Processing'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : order.status === 'Pending'
+                                    ? 'bg-amber-100 text-amber-700'
+                                    : 'bg-purple-100 text-purple-700'
+                                }`}
+                              >
+                                {order.status}
+                              </span>
                             </td>
                           </tr>
                         ))}
@@ -711,7 +603,7 @@ useEffect(() => {
                     </table>
                   ) : (
                     <div className="py-12 flex items-center justify-center">
-                      <EmptyState 
+                      <EmptyState
                         icon={<ShoppingCart className="h-12 w-12 text-secondary/30" />}
                         title="No recent orders"
                         description="There are no recent orders to display."
@@ -729,18 +621,14 @@ useEffect(() => {
                 <CardTitle className="text-xl font-heading font-medium text-secondary">Activity Feed</CardTitle>
                 <CardDescription className="text-secondary/60">{activityLoading ? 'Loading...' : 'Recent system activities'}</CardDescription>
               </div>
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="icon"
                 className="hover:bg-secondary/5 transition-all duration-200"
                 disabled={activityLoading}
                 onClick={() => fetchActivityFeed()}
               >
-                {activityLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
+                {activityLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               </Button>
             </CardHeader>
             <CardContent>
@@ -748,11 +636,11 @@ useEffect(() => {
                 {(() => {
                   const activityCounts = getActivityCounts(activityFeed);
                   const totalCount = Object.values(activityCounts).reduce((sum, count) => sum + count, 0);
-                  
+
                   return (
                     <>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         className={`${activityFilter === 'all' ? 'bg-primary text-white border-primary' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                         onClick={() => setActivityFilter('all')}
@@ -763,8 +651,8 @@ useEffect(() => {
                           <span className="ml-2 bg-primary/20 text-xs px-2 py-1 rounded-full">{totalCount}</span>
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         className={`${activityFilter === 'product' ? 'bg-blue-100 text-blue-700 border-blue-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                         onClick={() => setActivityFilter('product')}
@@ -776,8 +664,8 @@ useEffect(() => {
                           <span className="ml-2 bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{activityCounts.product}</span>
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         className={`${activityFilter === 'order' ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                         onClick={() => setActivityFilter('order')}
@@ -789,8 +677,8 @@ useEffect(() => {
                           <span className="ml-2 bg-emerald-100 text-emerald-700 text-xs px-2 py-1 rounded-full">{activityCounts.order}</span>
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         className={`${activityFilter === 'inventory' ? 'bg-purple-100 text-purple-700 border-purple-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                         onClick={() => setActivityFilter('inventory')}
@@ -802,8 +690,8 @@ useEffect(() => {
                           <span className="ml-2 bg-purple-100 text-purple-700 text-xs px-2 py-1 rounded-full">{activityCounts.inventory}</span>
                         )}
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         className={`${activityFilter === 'customer' ? 'bg-amber-100 text-amber-700 border-amber-200' : 'border-secondary/20 hover:border-secondary/40'} transition-all duration-200`}
                         onClick={() => setActivityFilter('customer')}
@@ -817,22 +705,31 @@ useEffect(() => {
                       </Button>
                     </>
                   );
-                })()} 
+                })()}
               </div>
-              
+
               <LoadingOverlay loading={activityLoading}>
-                {filteredActivityFeed && filteredActivityFeed.length > 0 ? (
+                {activityFeed && activityFeed.length > 0 ? (
                   <div className="space-y-4">
-                    {filteredActivityFeed.map((activity, index) => (
-                      <div key={index} className="flex items-start space-x-4 p-3 rounded-xl hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent transition-all duration-200">
+                    {activityFeed.map((activity, index) => (
+                      <div
+                        key={index}
+                        className="flex items-start space-x-4 p-3 rounded-xl hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent transition-all duration-200"
+                      >
                         <div className="flex-shrink-0 mt-1">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                            activity.type === 'product' ? 'bg-blue-100' :
-                            activity.type === 'order' ? 'bg-emerald-100' :
-                            activity.type === 'inventory' ? 'bg-purple-100' :
-                            activity.type === 'customer' ? 'bg-amber-100' :
-                            'bg-primary/10'
-                          }`}>
+                          <div
+                            className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                              activity.type === 'product'
+                                ? 'bg-blue-100'
+                                : activity.type === 'order'
+                                ? 'bg-emerald-100'
+                                : activity.type === 'inventory'
+                                ? 'bg-purple-100'
+                                : activity.type === 'customer'
+                                ? 'bg-amber-100'
+                                : 'bg-primary/10'
+                            }`}
+                          >
                             {activity.type === 'product' ? (
                               <Package className="h-5 w-5 text-blue-600" />
                             ) : activity.type === 'order' ? (
@@ -847,7 +744,7 @@ useEffect(() => {
                           </div>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-secondary leading-relaxed">{activity.description}</p>
+                          <p className="text-sm font-medium text-secondary leading-relaxed">{activity.message}</p>
                           <p className="text-xs text-secondary/60 mt-1">{formatDate(activity.timestamp, { format: 'short' })}</p>
                         </div>
                       </div>
@@ -855,10 +752,10 @@ useEffect(() => {
                   </div>
                 ) : (
                   <div className="py-12 flex items-center justify-center">
-                    <EmptyState 
+                    <EmptyState
                       icon={<Bell className="h-12 w-12 text-secondary/30" />}
-                      title={activityFilter === 'all' ? "No recent activity" : `No ${activityFilter} activity`}
-                      description={activityFilter === 'all' ? "There is no recent activity to display." : `There is no ${activityFilter} activity to display.`}
+                      title={activityFilter === 'all' ? 'No recent activity' : `No ${activityFilter} activity`}
+                      description={activityFilter === 'all' ? 'There is no recent activity to display.' : `There is no ${activityFilter} activity to display.`}
                     />
                   </div>
                 )}

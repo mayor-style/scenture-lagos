@@ -12,7 +12,14 @@ const ProductCard = ({ product }) => {
 
   const handleAddToCart = (e) => {
     e.preventDefault();
-    addToCart(product.id, 1);
+    // Ensure the product object is passed with the correct structure
+    addToCart({
+      id: product.id,
+      name: product.name,
+      price: product.price,
+      image: product.image || (product.images && product.images.length > 0 ? product.images[0] : null),
+      category: product.category,
+    }, 1);
     toast.success(`${product.name} added to cart`);
   };
 
@@ -25,26 +32,21 @@ const ProductCard = ({ product }) => {
       <Link to={`/product/${product.id}`} className="block relative" tabIndex={0}>
         <div className="relative aspect-square overflow-hidden bg-neutral-100">
           <img
-            src={`${product.image}?fm=webp`}
+            src={product.image || (product.images && product.images.length > 0 ? product.images[0] : '/placeholder-image.jpg')}
             alt={`Image of ${product.name} fragrance`}
             className="object-cover w-full h-full transition-all duration-300 group-hover:scale-[1.02] group-hover:brightness-105"
             loading="lazy"
           />
-          {/* Single subtle gradient overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         </div>
-        {/* Hover indicator */}
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
       </Link>
 
       <CardContent className="pt-6 pb-4 px-6">
         <div className="space-y-3">
-          {/* Category Badge */}
           <span className="inline-block px-3 py-1 text-sm text-neutral-600 bg-neutral-50 rounded-full uppercase tracking-wide font-medium border border-neutral-100">
             {product.category}
           </span>
-
-          {/* Product Name */}
 
           <Link
             to={`/product/${product.id}`}
@@ -55,7 +57,6 @@ const ProductCard = ({ product }) => {
             </h3>
           </Link>
 
-          {/* Price */}
           <div className="pt-1">
             <span className="text-xl font-light text-neutral-900 tracking-tight">
               {formatPrice(product.price)}

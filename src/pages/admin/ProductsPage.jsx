@@ -1,5 +1,5 @@
-// File: ProductsPage.jsx
-import React, { useState, useEffect } from 'react';
+// File: src/pages/admin/ProductsPage.jsx
+import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
@@ -85,8 +85,7 @@ const ProductsPage = () => {
       
       setLoading(false);
     } catch (err) {
-      console.error('Error fetching products:', err);
-      setError(err.message || 'Failed to load products');
+      setError(err.message);
       setLoading(false);
       setProducts([]);
       if (categories.length === 0) {
@@ -107,8 +106,7 @@ const ProductsPage = () => {
       toast.success('Product deleted successfully');
       fetchProducts();
     } catch (err) {
-      console.error('Error deleting product:', err);
-      toast.error('Failed to delete product');
+      toast.error(err.message);
     } finally {
       setDeleteLoading(null);
     }
@@ -124,20 +122,18 @@ const ProductsPage = () => {
     setCurrentPage(pageNumber);
   };
   
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(1);
+  const debounce = (func, delay) => {
+    let timeoutId;
+    return (...args) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func(...args), delay);
+    };
   };
   
-  const handleCategoryChange = (e) => {
-    setSelectedCategory(e.target.value);
+  const handleSearchChange = debounce((value) => {
+    setSearchTerm(value);
     setCurrentPage(1);
-  };
-  
-  const handleStatusChange = (e) => {
-    setSelectedStatus(e.target.value);
-    setCurrentPage(1);
-  };
+  }, 300);
 
   return (
     <>
@@ -214,8 +210,8 @@ const ProductsPage = () => {
                       type="text"
                       placeholder="Search products..."
                       className="w-full pl-12 pr-4 py-3 bg-white/80 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                      value={searchTerm}
-                      onChange={handleSearchChange}
+                      defaultValue={searchTerm}
+                      onChange={(e) => handleSearchChange(e.target.value)}
                     />
                   </div>
                   
@@ -225,7 +221,10 @@ const ProductsPage = () => {
                       <select
                         className="pl-11 pr-8 py-3 bg-white/80 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                         value={selectedCategory}
-                        onChange={handleCategoryChange}
+                        onChange={(e) => {
+                          setSelectedCategory(e.target.value);
+                          setCurrentPage(1);
+                        }}
                       >
                         <option value="">All Categories</option>
                         {categories.map(category => (
@@ -239,7 +238,10 @@ const ProductsPage = () => {
                       <select
                         className="pl-11 pr-8 py-3 bg-white/80 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                         value={selectedStatus}
-                        onChange={handleStatusChange}
+                        onChange={(e) => {
+                          setSelectedStatus(e.target.value);
+                          setCurrentPage(1);
+                        }}
                       >
                         <option value="">All Status</option>
                         <option value="Active">Active</option>
@@ -278,13 +280,11 @@ const ProductsPage = () => {
                             <td className="py-6 px-6">{product.categoryName}</td>
                             <td className="py-6 px-6">
                               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                                product.stock > 10 ? 'bg-emerald-100 text-emerald-800' :
-                                product.stock === 0 ? 'bg-red-100 text-red-800' :
+                                product.stockStatus === 'Active' ? 'bg-emerald-100 text-emerald-800' :
+                                product.stockStatus === 'Out of Stock' ? 'bg-red-100 text-red-800' :
                                 'bg-amber-100 text-amber-800'
                               }`}>
-                                {product.stock > 10 ? 'Active' : 
-                                 product.stock === 0 ? 'Out of Stock' : 
-                                 'Low Stock'}
+                                {product.stockStatus}
                               </span>
                             </td>
                             <td className="py-6 pl-6 pr-0">
@@ -377,13 +377,11 @@ const ProductsPage = () => {
                             <span className="text-slate-600">Status</span>
                             <div className="mt-1">
                               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                product.stock > 10 ? 'bg-emerald-100 text-emerald-800' :
-                                product.stock === 0 ? 'bg-red-100 text-red-800' :
+                                product.stockStatus === 'Active' ? 'bg-emerald-100 text-emerald-800' :
+                                product.stockStatus === 'Out of Stock' ? 'bg-red-100 text-red-800' :
                                 'bg-amber-100 text-amber-800'
                               }`}>
-                                {product.stock > 10 ? 'Active' : 
-                                 product.stock === 0 ? 'Out of Stock' : 
-                                 'Low Stock'}
+                                {product.stockStatus}
                               </span>
                             </div>
                           </div>

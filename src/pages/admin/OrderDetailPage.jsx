@@ -19,7 +19,8 @@ import {
   Printer,
   Send,
   AlertCircle,
-  Trash2
+  Trash2,
+  Loader2
 } from 'lucide-react';
 import OrderService from '../../services/admin/order.service';
 import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
@@ -48,9 +49,10 @@ const OrderDetailPage = () => {
       const orderData = response.order;
       setOrder({
         ...orderData,
+        id: orderData._id,
         customer: {
           id: orderData.user?._id || 'N/A',
-          name: orderData.user ? `${orderData.user.firstName} ${orderData.user.lastName}` : 'Guest',
+          name: orderData.user ? `${orderData.user.firstName || ''} ${orderData.user.lastName || ''}`.trim() : 'Guest',
           email: orderData.user?.email || 'N/A',
           phone: orderData.user?.phone || 'N/A'
         },
@@ -58,15 +60,15 @@ const OrderDetailPage = () => {
         items: orderData.items.map(item => ({
           id: item._id,
           product_id: item.product?._id,
-          name: item.product?.name || 'Unknown Product',
+          name: item.name || 'Unknown Product',
           variant: item.variant || '',
           price: item.price,
           quantity: item.quantity,
-          subtotal: item.subtotal
+          subtotal: item.subtotal || item.price * item.quantity // Use calculated subtotal
         })),
         timeline: orderData.timeline.map(event => ({
           id: event._id,
-          date: event.createdAt,
+          date: event.timestamp,
           status: event.status,
           description: event.note || `Order status updated to ${event.status}`
         })),
@@ -74,13 +76,24 @@ const OrderDetailPage = () => {
           id: note._id,
           date: note.createdAt,
           content: note.content,
-          createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName || 'Admin', lastName: note.createdBy.lastName || '' } : { firstName: 'Admin' }
         })),
-        shipping_address: orderData.shippingAddress,
+        shipping_address: {
+          street: orderData.shippingAddress.street,
+          city: orderData.shippingAddress.city,
+          state: orderData.shippingAddress.state,
+          postal_code: orderData.shippingAddress.postalCode,
+          country: orderData.shippingAddress.country
+        },
         payment_method: orderData.paymentInfo?.method || 'N/A',
-        payment_id: orderData.paymentInfo?.id || 'N/A',
+        payment_id: orderData.paymentInfo?.transactionId || 'N/A',
         payment_status: orderData.paymentInfo?.status || 'N/A',
-        shipping_method: orderData.shippingMethod || 'Standard Delivery'
+        shipping_method: orderData.shippingMethod || 'Standard Delivery',
+        subtotal: orderData.subtotal,
+        shipping: orderData.shippingFee, // Changed to match backend
+        tax: orderData.tax,
+        total: orderData.totalAmount, // Changed to match backend
+        status: orderData.status
       });
       setStatusUpdate(orderData.status);
     } catch (err) {
@@ -110,7 +123,7 @@ const OrderDetailPage = () => {
           status: response.order.status,
           timeline: response.order.timeline.map(event => ({
             id: event._id,
-            date: event.createdAt,
+            date: event.timestamp,
             status: event.status,
             description: event.note || `Order status updated to ${event.status}`
           }))
@@ -124,24 +137,30 @@ const OrderDetailPage = () => {
   };
 
   const handleAddNote = async () => {
-    if (note.trim()) {
-      try {
-        const response = await OrderService.addOrderNote(id, { content: note.trim() });
-        setOrder({
-          ...order,
-          notes: response.order.notes.map(note => ({
-            id: note._id,
-            date: note.createdAt,
-            content: note.content,
-            createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
-          }))
-        });
-        setNote('');
-        toast.success('Note added successfully');
-      } catch (err) {
-        console.error('Error adding note:', err);
-        toast.error(err.message || 'Failed to add note');
-      }
+    if (!note.trim()) {
+      toast.error('Note content cannot be empty');
+      return;
+    }
+    if (note.trim().length > 1000) {
+      toast.error('Note cannot exceed 1000 characters');
+      return;
+    }
+    try {
+      const response = await OrderService.addOrderNote(id, { content: note.trim() });
+      setOrder({
+        ...order,
+        notes: response.order.notes.map(note => ({
+          id: note._id,
+          date: note.createdAt,
+          content: note.content,
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName || 'Admin', lastName: note.createdBy.lastName || '' } : { firstName: 'Admin' }
+        }))
+      });
+      setNote('');
+      toast.success('Note added successfully');
+    } catch (err) {
+      console.error('Error adding note:', err);
+      toast.error(err.message || 'Failed to add note');
     }
   };
 
@@ -153,7 +172,7 @@ const OrderDetailPage = () => {
         status: response.order.status,
         timeline: response.order.timeline.map(event => ({
           id: event._id,
-          date: event.createdAt,
+          date: event.timestamp,
           status: event.status,
           description: event.note || `Order status updated to ${event.status}`
         }))
@@ -171,10 +190,18 @@ const OrderDetailPage = () => {
       toast.error('Please provide refund amount and reason');
       return;
     }
+    if (isNaN(refundAmount) || refundAmount <= 0 || refundAmount > order.total) {
+      toast.error('Invalid refund amount');
+      return;
+    }
+    if (refundReason.trim().length > 1000) {
+      toast.error('Refund reason cannot exceed 1000 characters');
+      return;
+    }
     try {
       const response = await OrderService.initiateRefund(id, {
         amount: parseFloat(refundAmount),
-        reason: refundReason
+        reason: refundReason.trim()
       });
       setOrder({
         ...order,
@@ -182,7 +209,7 @@ const OrderDetailPage = () => {
         payment_status: response.order.paymentInfo.status,
         timeline: response.order.timeline.map(event => ({
           id: event._id,
-          date: event.createdAt,
+          date: event.timestamp,
           status: event.status,
           description: event.note || `Order status updated to ${event.status}`
         })),
@@ -190,7 +217,7 @@ const OrderDetailPage = () => {
           id: note._id,
           date: note.createdAt,
           content: note.content,
-          createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName || 'Admin', lastName: note.createdBy.lastName || '' } : { firstName: 'Admin' }
         }))
       });
       setIsRefundDialogOpen(false);
@@ -254,7 +281,7 @@ const OrderDetailPage = () => {
           id: note._id,
           date: note.createdAt,
           content: note.content,
-          createdBy: note.createdBy ? { firstName: note.createdBy.firstName, lastName: note.createdBy.lastName } : { firstName: 'Admin' }
+          createdBy: note.createdBy ? { firstName: note.createdBy.firstName || 'Admin', lastName: note.createdBy.lastName || '' } : { firstName: 'Admin' }
         }))
       });
       toast.success('Email sent successfully');
@@ -302,7 +329,6 @@ const OrderDetailPage = () => {
       </Helmet>
       
       <div className="space-y-6">
-        {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="flex items-center">
             <Link to="/admin/orders" className="mr-4">
@@ -319,10 +345,10 @@ const OrderDetailPage = () => {
                 <span>{formatDate(order.date)}</span>
                 <span className="mx-2">•</span>
                 <span className={`px-2 py-0.5 text-xs rounded-full ${
-                  order.status === 'Delivered' ? 'bg-green-100 text-green-800' :
-                  order.status === 'Processing' ? 'bg-blue-100 text-blue-800' :
-                  order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                  order.status === 'Shipped' ? 'bg-purple-100 text-purple-800' :
+                  order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                  order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                  order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                  order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
                   'bg-red-100 text-red-800'
                 }`}>
                   {order.status}
@@ -344,7 +370,6 @@ const OrderDetailPage = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Order Items */}
             <Card>
               <CardHeader>
                 <CardTitle>Order Items</CardTitle>
@@ -401,7 +426,6 @@ const OrderDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Order Timeline */}
             <Card>
               <CardHeader>
                 <CardTitle>Order Timeline</CardTitle>
@@ -432,7 +456,6 @@ const OrderDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Order Notes */}
             <Card>
               <CardHeader>
                 <CardTitle>Order Notes</CardTitle>
@@ -482,7 +505,6 @@ const OrderDetailPage = () => {
           </div>
 
           <div className="space-y-6">
-            {/* Order Actions */}
             <Card>
               <CardHeader>
                 <CardTitle>Order Actions</CardTitle>
@@ -506,6 +528,7 @@ const OrderDetailPage = () => {
                       <option value="shipped">Shipped</option>
                       <option value="delivered">Delivered</option>
                       <option value="cancelled">Cancelled</option>
+                      <option value="refunded">Refunded</option>
                     </select>
                     <Button 
                       onClick={handleStatusUpdate} 
@@ -543,7 +566,6 @@ const OrderDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Customer Information */}
             <Card>
               <CardHeader>
                 <CardTitle>Customer</CardTitle>
@@ -567,17 +589,18 @@ const OrderDetailPage = () => {
                     <div className="text-sm">{order.customer.phone}</div>
                   </div>
                   <div className="pt-2">
-                    <Link to={`/admin/customers/${order.customer.id}`}>
-                      <Button variant="outline" className="w-full">
-                        View Customer Profile
-                      </Button>
-                    </Link>
+                    {order.customer.id !== 'N/A' && (
+                      <Link to={`/admin/customers/${order.customer.id}`}>
+                        <Button variant="outline" className="w-full">
+                          View Customer Profile
+                        </Button>
+                      </Link>
+                    )}
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Shipping Information */}
             <Card>
               <CardHeader>
                 <CardTitle>Shipping</CardTitle>
@@ -608,7 +631,6 @@ const OrderDetailPage = () => {
               </CardContent>
             </Card>
 
-            {/* Payment Information */}
             <Card>
               <CardHeader>
                 <CardTitle>Payment</CardTitle>
@@ -652,7 +674,6 @@ const OrderDetailPage = () => {
           </div>
         </div>
 
-        {/* Refund Dialog */}
         <Dialog open={isRefundDialogOpen} onOpenChange={setIsRefundDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -699,7 +720,6 @@ const OrderDetailPage = () => {
           </DialogContent>
         </Dialog>
 
-        {/* Cancel Order Dialog */}
         <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
           <DialogContent>
             <DialogHeader>

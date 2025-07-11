@@ -10,6 +10,9 @@ import NotFoundPage from './pages/NotFoundPage';
 import ScrollToTop from './components/ScrollToTop';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import AddCustomerPage from './pages/admin/AddCustomerPage';
+import EditCustomerPage from './pages/admin/EditCustomerPage';
+import InventoryHistory from './pages/admin/InventoryHistory';
 
 // Lazy-loaded components for performance
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -27,6 +30,8 @@ const LoginPage = lazy(() => import('./pages/admin/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'));
 const ProductsPage = lazy(() => import('./pages/admin/ProductsPage'));
 const ProductFormPage = lazy(() => import('./pages/admin/ProductFormPage'));
+const CategoryPage = lazy(() => import('./pages/admin/CategoryPage'));
+const CategoryFormPage = lazy(() => import('./pages/admin/CategoryFormPage'));
 const OrdersPage = lazy(() => import('./pages/admin/OrdersPage'));
 const OrderDetailPage = lazy(() => import('./pages/admin/OrderDetailPage'));
 const CustomersPage = lazy(() => import('./pages/admin/CustomersPage'));
@@ -105,11 +110,18 @@ const App = () => {
                 <Route path="products/:id" element={<ProductFormPage />} />
                 <Route path="products/new" element={<ProductFormPage />} />
                 <Route path="products/:id/edit" element={<ProductFormPage />} />
+                <Route path="categories" element={<CategoryPage />} />
+                <Route path="categories/new" element={<CategoryFormPage />} />
+                <Route path="categories/:id" element={<CategoryFormPage />} />
+                <Route path="categories/:id/:action" element={<CategoryFormPage />} />
                 <Route path="orders" element={<OrdersPage />} />
                 <Route path="orders/:id" element={<OrderDetailPage />} />
                 <Route path="customers" element={<CustomersPage />} />
                 <Route path="customers/:id" element={<CustomerDetailPage />} />
+                <Route path="customers/add" element={<AddCustomerPage />} />
+                <Route path="customers/:id/edit" element={<EditCustomerPage />} />
                 <Route path="inventory" element={<InventoryPage />} />
+                <Route path="inventory/:id/history" element={<InventoryHistory />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
 
