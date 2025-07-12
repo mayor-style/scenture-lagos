@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '../../components/ui/Button';
 import { ArrowLeft, Save, Trash2, Plus, X, Upload, Image as ImageIcon, Eye } from 'lucide-react';
 import ProductService from '../../services/admin/product.service';
-import { useToast } from '../../components/Toast'; // Import custom toast
+import { useToast } from '../../components/ui/Toast'; // Import custom toast
 import { formatPrice } from '../../lib/utils';
 
 const ProductFormPage = () => {

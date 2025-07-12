@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingOverlay } from '../../components/ui/LoadingState';
-import { useToast } from '../../components/Toast'; // Import custom toast
+import { useToast } from '../../components/ui/Toast'; // Import custom toast
 import SettingsService from '../../services/admin/settings.service';
 import {
   Save,

@@ -27,7 +27,7 @@ import OrderService from '../../services/admin/order.service';
 import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/Dialog';
-import { useToast } from '../../components/Toast'; // Import custom toast
+import { useToast } from '../../components/ui/Toast'; // Import custom toast
 
 const OrderDetailPage = () => {
   const { id } = useParams();
