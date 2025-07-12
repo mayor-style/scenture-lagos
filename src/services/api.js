@@ -3,7 +3,7 @@ import { toast } from 'react-hot-toast';
 
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://scenture-lagos-server.onrender.com',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://scenture-lagos-server.onrender.com/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
