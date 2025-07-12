@@ -5,9 +5,10 @@ import { Card, CardContent, CardFooter } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { formatPrice } from '../../lib/utils';
 import { useCart } from '../../contexts/CartContext';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast';
 
 const ProductCard = ({ product }) => {
+  const {addToast} = useToast();
   const { addToCart } = useCart();
 
   const handleAddToCart = (e) => {
@@ -20,7 +21,6 @@ const ProductCard = ({ product }) => {
       image: product.image || (product.images && product.images.length > 0 ? product.images[0] : null),
       category: product.category,
     }, 1);
-    toast.success(`${product.name} added to cart`);
   };
 
   return (

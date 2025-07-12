@@ -1,3 +1,4 @@
+// src/pages/DashboardPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
@@ -9,13 +10,14 @@ import { useNavigate } from 'react-router-dom';
 import DashboardService from '../../services/admin/dashboard.service';
 import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
-import { useToast } from '../../components/ui/Toast'; // Replaced react-hot-toast with custom toast
+import { useToast } from '../../components/ui/Toast';
+import { useRefresh } from '../../contexts/RefreshContext';
 
 const DashboardPage = () => {
   const navigate = useNavigate();
-  const { addToast } = useToast(); // Use custom toast hook
+  const { addToast } = useToast();
+  const { needsRefresh, setNeedsRefresh } = useRefresh();
 
-  // State for dashboard data
   const [summary, setSummary] = useState({
     totalSales: 0,
     totalOrders: 0,
@@ -32,8 +34,6 @@ const DashboardPage = () => {
   const [activityFeed, setActivityFeed] = useState([]);
   const [isPolling, setIsPolling] = useState(false);
   const [pollingInterval, setPollingInterval] = useState(null);
-
-  // Loading and error states
   const [loading, setLoading] = useState(true);
   const [salesLoading, setSalesLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(true);
@@ -42,52 +42,42 @@ const DashboardPage = () => {
   const [salesPeriod, setSalesPeriod] = useState('week');
   const [activityFilter, setActivityFilter] = useState('all');
 
-  // Fetch summary data
   const fetchSummaryData = async () => {
     setLoading(true);
-    setError(null);
-
     try {
       const response = await DashboardService.getDashboardSummary();
-      const { metrics } = response.data;
       setSummary({
-        totalSales: metrics.totalSales || 0,
-        totalOrders: metrics.totalOrders || 0,
-        inventoryValue: metrics.inventoryValue || 0,
-        newCustomers: metrics.newCustomers || 0,
-        salesGrowth: metrics.salesGrowth || 0,
-        ordersGrowth: metrics.ordersGrowth || 0,
-        customersGrowth: metrics.customersGrowth || 0,
-        lowStockProducts: metrics.lowStockProducts || 0,
+        totalSales: response.data.metrics.totalSales,
+        totalOrders: response.data.metrics.totalOrders,
+        inventoryValue: response.data.metrics.inventoryValue,
+        newCustomers: response.data.metrics.newCustomers,
+        salesGrowth: response.data.metrics.salesGrowth,
+        ordersGrowth: response.data.metrics.ordersGrowth,
+        customersGrowth: response.data.metrics.customersGrowth,
+        lowStockProducts: response.data.metrics.lowStockProducts,
         lastUpdated: new Date().toISOString(),
       });
-      setLoading(false);
     } catch (err) {
-      console.error('Error fetching summary data:', err.response?.status || err.message);
-      setError(err.response?.data?.message || 'Failed to fetch summary data');
-      setLoading(false);
+      setError('Failed to fetch summary data');
+      addToast('Failed to load dashboard summary', 'error');
     }
+    setLoading(false);
   };
 
-  // Fetch sales data for chart
   const fetchSalesData = async (period = 'week', startDate, endDate) => {
     setSalesLoading(true);
-
     try {
-      const salesResponse = await DashboardService.getSalesData({ period, startDate, endDate });
-      setSalesData(salesResponse.data || []);
-      setSalesLoading(false);
+      const response = await DashboardService.getSalesData({ period, startDate, endDate });
+      setSalesData(response.data);
     } catch (err) {
-      console.error('Error fetching sales data:', err.response?.status || err.message);
       setSalesData([]);
-      setSalesLoading(false);
+      addToast('Failed to load sales data', 'error');
     }
+    setSalesLoading(false);
   };
 
-  // Fetch recent orders
   const fetchRecentOrders = async () => {
     setOrdersLoading(true);
-
     try {
       const response = await DashboardService.getRecentOrders({ limit: 5 });
       const formattedOrders = response.data.orders.map((order) => ({
@@ -98,78 +88,41 @@ const DashboardPage = () => {
         status: order.status,
       }));
       setRecentOrders(formattedOrders);
-      setOrdersLoading(false);
     } catch (err) {
-      console.error('Error fetching recent orders:', err.response?.status || err.message);
       setRecentOrders([]);
-      setOrdersLoading(false);
+      addToast('Failed to load recent orders', 'error');
     }
+    setOrdersLoading(false);
   };
 
-  // Fetch activity feed
   const fetchActivityFeed = async () => {
     setActivityLoading(true);
-
     try {
       const response = await DashboardService.getActivityFeed({ limit: 10, type: activityFilter });
-      setActivityFeed(response.data.activities || []);
-      setActivityLoading(false);
+      setActivityFeed(response.data.activities);
     } catch (err) {
-      console.error('Error fetching activity feed:', err.response?.status || err.message);
       setActivityFeed([]);
-      setActivityLoading(false);
+      addToast('Failed to load activity feed', 'error');
     }
+    setActivityLoading(false);
   };
 
-  // Fetch all dashboard data with retry mechanism
-  const fetchDashboardData = async (retryCount = 0) => {
-    const maxRetries = 3;
-    try {
-      const endDate = new Date();
-      const startDate = new Date();
-
-      switch (salesPeriod) {
-        case 'week':
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case 'month':
-          startDate.setMonth(startDate.getMonth() - 1);
-          break;
-        case 'year':
-          startDate.setFullYear(startDate.getFullYear() - 1);
-          break;
-        default:
-          startDate.setDate(startDate.getDate() - 7);
-      }
-
-      const formattedStartDate = startDate.toISOString().split('T')[0];
-      const formattedEndDate = endDate.toISOString().split('T')[0];
-
-      await Promise.all([
-        fetchSummaryData(),
-        fetchSalesData(salesPeriod, formattedStartDate, formattedEndDate),
-        fetchRecentOrders(),
-        fetchActivityFeed(),
-      ]);
-
-      addToast('Dashboard data refreshed', 'success'); // Updated to use custom toast
-    } catch (err) {
-      if (retryCount < maxRetries) {
-        addToast(`Retrying ${retryCount + 1} of ${maxRetries}...`, 'info'); // Updated to use custom toast
-        setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
-      } else {
-        setError(err.response?.data?.message || 'Failed to refresh dashboard data');
-        addToast(err.response?.data?.message || 'Failed to refresh dashboard data', 'error'); // Updated to use custom toast
-      }
-    }
+  const fetchDashboardData = async () => {
+    setError(null);
+    DashboardService.clearCache(); // Clear cache for fresh data
+    await Promise.all([
+      fetchSummaryData(),
+      fetchSalesData(salesPeriod, new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split('T')[0], new Date().toISOString().split('T')[0]),
+      fetchRecentOrders(),
+      fetchActivityFeed(),
+    ]);
+    addToast('Dashboard data refreshed', 'success');
   };
 
-  // Handle sales period change
   const handlePeriodChange = (period) => {
     setSalesPeriod(period);
     const endDate = new Date();
     const startDate = new Date();
-
     switch (period) {
       case 'week':
         startDate.setDate(startDate.getDate() - 7);
@@ -183,13 +136,11 @@ const DashboardPage = () => {
       default:
         startDate.setDate(startDate.getDate() - 7);
     }
-
     const formattedStartDate = startDate.toISOString().split('T')[0];
     const formattedEndDate = endDate.toISOString().split('T')[0];
     fetchSalesData(period, formattedStartDate, formattedEndDate);
   };
 
-  // Get activity counts
   const getActivityCounts = (activities) => {
     if (!Array.isArray(activities) || activities.length === 0) {
       return { product: 0, order: 0, inventory: 0, customer: 0, general: 0 };
@@ -201,22 +152,45 @@ const DashboardPage = () => {
     }, { product: 0, order: 0, inventory: 0, customer: 0, general: 0 });
   };
 
-  // Fetch data on mount
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    const checkCache = async () => {
+      const summaryCached = DashboardService.getCachedData(`summary_${JSON.stringify({})}`);
+      const ordersCached = DashboardService.getCachedData(`recent-orders_${JSON.stringify({ limit: 5 })}`);
+      const salesCached = DashboardService.getCachedData(`sales-data_${JSON.stringify({ period: salesPeriod })}`);
+      const activityCached = DashboardService.getCachedData(`activity-feed_${JSON.stringify({ limit: 10, type: activityFilter })}`);
 
-  // Update activity feed when filter changes
-  useEffect(() => {
-    fetchActivityFeed();
-  }, [activityFilter]);
+      if (
+        needsRefresh ||
+        !summaryCached ||
+        !ordersCached ||
+        !salesCached ||
+        !activityCached
+      ) {
+        fetchDashboardData();
+        setNeedsRefresh(false);
+      } else {
+        setSummary(summaryCached.metrics);
+        setRecentOrders(ordersCached.orders.map((order) => ({
+          id: order.orderNumber,
+          customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
+          date: order.createdAt,
+          total: order.totalAmount,
+          status: order.status,
+        })));
+        setSalesData(salesCached);
+        setActivityFeed(activityCached.activities);
+        setLoading(false);
+        setOrdersLoading(false);
+        setSalesLoading(false);
+        setActivityLoading(false);
+      }
+    };
+    checkCache();
+  }, [salesPeriod, activityFilter, needsRefresh]);
 
-  // Clean up polling on component unmount
   useEffect(() => {
     return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-      }
+      if (pollingInterval) clearInterval(pollingInterval);
     };
   }, [pollingInterval]);
 
@@ -225,22 +199,17 @@ const DashboardPage = () => {
       <Helmet>
         <title>Dashboard | Scenture Lagos Admin</title>
       </Helmet>
-
       <div className="space-y-8 px-0">
         <div className="flex flex-col space-y-6 md:space-y-0 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
-            <h1 className="dashboardHeading">
-              Dashboard
-            </h1>
-            <p className="dashboardSubHeading">
-              Welcome back to your admin dashboard
-            </p>
+            <h1 className="dashboardHeading">Dashboard</h1>
+            <p className="dashboardSubHeading">Welcome back to your admin dashboard</p>
           </div>
           <div className="flex flex-col md:flex-row gap-3">
             <Button
               variant="outline"
               className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm"
-              onClick={() => fetchDashboardData()}
+              onClick={fetchDashboardData}
               disabled={loading || salesLoading || ordersLoading || activityLoading}
             >
               {loading || salesLoading || ordersLoading || activityLoading ? (
@@ -265,18 +234,20 @@ const DashboardPage = () => {
             </Button>
             <Button
               variant="outline"
-              className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm"
+              className={`flex items-center justify-center h-11 px-6 ${
+                isPolling ? 'bg-green-100 text-green-700' : 'border-secondary/20 hover:border-secondary/40'
+              } transition-all duration-200`}
               onClick={() => {
                 if (isPolling) {
                   clearInterval(pollingInterval);
                   setPollingInterval(null);
                   setIsPolling(false);
-                  addToast('Real-time updates disabled', 'success'); // Updated to use custom toast
+                  addToast('Real-time updates disabled', 'success');
                 } else {
-                  const interval = setInterval(() => fetchDashboardData(), 60000); // Poll every 60 seconds
+                  const interval = setInterval(fetchDashboardData, 60000);
                   setPollingInterval(interval);
                   setIsPolling(true);
-                  addToast('Real-time updates enabled', 'success'); // Updated to use custom toast
+                  addToast('Real-time updates enabled', 'success');
                 }
               }}
               disabled={loading || salesLoading || ordersLoading || activityLoading}

@@ -1,9 +1,11 @@
+// src/App.jsx
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider } from './contexts/AuthContext';
 import { CartProvider } from './contexts/CartContext';
+import { RefreshProvider } from './contexts/RefreshContext';
 import Layout from './components/layout/Layout';
 import AdminLayout from './components/admin/AdminLayout';
 import NotFoundPage from './pages/NotFoundPage';
@@ -51,16 +53,14 @@ class ErrorBoundary extends React.Component {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '20px', textAlign: 'center' }}>
-          <h1 >Something went wrong</h1>
-          <p > An unexpected error occurred, please try again later.</p>
+          <h1>Something went wrong</h1>
+          <p>An unexpected error occurred, please try again later.</p>
         </div>
       );
     }
     return this.props.children;
   }
 }
-
-// Error Boundary Component remains unchanged
 
 const App = () => {
   return (
@@ -71,63 +71,60 @@ const App = () => {
           <ToastProvider>
             <AuthProvider>
               <CartProvider>
-                <Suspense
-                  fallback={
-                    <div className="min-h-screen flex items-center justify-center">
-                      <LoadingSpinner size="lg" />
-                    </div>
-                  }
-                >
-              <Routes>
-              {/* Public routes wrapped in Layout */}
-              <Route element={<Layout />}>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/shop" element={<ShopPage />} />
-                <Route path="/shop/:category" element={<ShopPage />} />
-                <Route path="/product/:id" element={<ProductDetailPage />} />
-                <Route path="/cart" element={<CartPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/contact" element={<ContactPage />} />
-                <Route path="/account" element={<AccountPage />} />
-              </Route>
-
-              {/* Admin routes without Layout */}
-              <Route path="/admin/login" element={<LoginPage />} />
-              <Route path="/unauthorized" element={<UnauthorizedPage />} />
-              
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute requiredRoles={['admin', 'superadmin']}>
-                    <AdminLayout />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<Navigate to="/admin/dashboard" replace />} />
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="products" element={<ProductsPage />} />
-                <Route path="products/:id" element={<ProductFormPage />} />
-                <Route path="products/new" element={<ProductFormPage />} />
-                <Route path="products/:id/edit" element={<ProductFormPage />} />
-                <Route path="categories" element={<CategoryPage />} />
-                <Route path="categories/new" element={<CategoryFormPage />} />
-                <Route path="categories/:id" element={<CategoryFormPage />} />
-                <Route path="categories/:id/:action" element={<CategoryFormPage />} />
-                <Route path="orders" element={<OrdersPage />} />
-                <Route path="orders/:id" element={<OrderDetailPage />} />
-                <Route path="customers" element={<CustomersPage />} />
-                <Route path="customers/:id" element={<CustomerDetailPage />} />
-                <Route path="customers/add" element={<AddCustomerPage />} />
-                <Route path="customers/:id/edit" element={<EditCustomerPage />} />
-                <Route path="inventory" element={<InventoryPage />} />
-                <Route path="inventory/:id/history" element={<InventoryHistory />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </Route>
-
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-                </Suspense>
+                <RefreshProvider>
+                  <Suspense
+                    fallback={
+                      <div className="min-h-screen flex items-center justify-center">
+                        <LoadingSpinner size="lg" />
+                      </div>
+                    }
+                  >
+                    <Routes>
+                      <Route element={<Layout />}>
+                        <Route path="/" element={<HomePage />} />
+                        <Route path="/shop" element={<ShopPage />} />
+                        <Route path="/shop/:category" element={<ShopPage />} />
+                        <Route path="/product/:id" element={<ProductDetailPage />} />
+                        <Route path="/cart" element={<CartPage />} />
+                        <Route path="/checkout" element={<CheckoutPage />} />
+                        <Route path="/about" element={<AboutPage />} />
+                        <Route path="/contact" element={<ContactPage />} />
+                        <Route path="/account" element={<AccountPage />} />
+                      </Route>
+                      <Route path="/admin/login" element={<LoginPage />} />
+                      <Route path="/unauthorized" element={<UnauthorizedPage />} />
+                      <Route
+                        path="/admin"
+                        element={
+                          <ProtectedRoute requiredRoles={['admin', 'superadmin']}>
+                            <AdminLayout />
+                          </ProtectedRoute>
+                        }
+                      >
+                        <Route index element={<Navigate to="/admin/dashboard" replace />} />
+                        <Route path="dashboard" element={<DashboardPage />} />
+                        <Route path="products" element={<ProductsPage />} />
+                        <Route path="products/:id" element={<ProductFormPage />} />
+                        <Route path="products/new" element={<ProductFormPage />} />
+                        <Route path="products/:id/edit" element={<ProductFormPage />} />
+                        <Route path="categories" element={<CategoryPage />} />
+                        <Route path="categories/new" element={<CategoryFormPage />} />
+                        <Route path="categories/:id" element={<CategoryFormPage />} />
+                        <Route path="categories/:id/:action" element={<CategoryFormPage />} />
+                        <Route path="orders" element={<OrdersPage />} />
+                        <Route path="orders/:id" element={<OrderDetailPage />} />
+                        <Route path="customers" element={<CustomersPage />} />
+                        <Route path="customers/:id" element={<CustomerDetailPage />} />
+                        <Route path="customers/add" element={<AddCustomerPage />} />
+                        <Route path="customers/:id/edit" element={<EditCustomerPage />} />
+                        <Route path="inventory" element={<InventoryPage />} />
+                        <Route path="inventory/:id/history" element={<InventoryHistory />} />
+                        <Route path="settings" element={<SettingsPage />} />
+                      </Route>
+                      <Route path="*" element={<NotFoundPage />} />
+                    </Routes>
+                  </Suspense>
+                </RefreshProvider>
               </CartProvider>
             </AuthProvider>
           </ToastProvider>

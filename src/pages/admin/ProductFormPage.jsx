@@ -1,3 +1,4 @@
+// src/pages/admin/ProductFormPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -5,8 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '../../components/ui/Button';
 import { ArrowLeft, Save, Trash2, Plus, X, Upload, Image as ImageIcon, Eye } from 'lucide-react';
 import ProductService from '../../services/admin/product.service';
-import { useToast } from '../../components/ui/Toast'; // Import custom toast
+import { useToast } from '../../components/ui/Toast';
+import { useRefresh } from '../../contexts/RefreshContext';
 import { formatPrice } from '../../lib/utils';
+import DashboardService from '../../services/admin/dashboard.service';
 
 const ProductFormPage = () => {
   const { id, action } = useParams();
@@ -14,7 +17,8 @@ const ProductFormPage = () => {
   const isEditMode = Boolean(id && action === 'edit');
   const isViewMode = Boolean(id && action === 'view');
   const isCreateMode = !id && !action;
-  const { addToast } = useToast(); // Initialize custom toast
+  const { addToast } = useToast();
+  const { setNeedsRefresh } = useRefresh();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -28,9 +32,8 @@ const ProductFormPage = () => {
     scent_notes: [],
     ingredients: '',
     variants: [],
-    images: []
+    images: [],
   });
-
   const [categories, setCategories] = useState([]);
   const [newScentNote, setNewScentNote] = useState('');
   const [newVariant, setNewVariant] = useState({ size: '', price: '', stock: '' });
@@ -38,29 +41,54 @@ const ProductFormPage = () => {
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(isEditMode || isViewMode);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const categoriesResponse = await ProductService.getAllCategories();
-        setCategories(categoriesResponse.data);
+        const cachedCategories = ProductService.getCachedData(`categories_${JSON.stringify({})}`);
+        if (cachedCategories) {
+          setCategories(cachedCategories.data);
+        } else {
+          const categoriesResponse = await ProductService.getAllCategories();
+          setCategories(categoriesResponse.data);
+        }
 
         if (id) {
-          const { product } = await ProductService.getProduct(id);
-          setFormData({
-            name: product.name || '',
-            sku: product.sku || '',
-            price: product.price || '',
-            stock: product.stock || '',
-            status: product.status || 'published',
-            category: product.category || '',
-            categoryId: product.categoryId || '',
-            description: product.description || '',
-            scent_notes: product.scent_notes || [],
-            ingredients: product.ingredients || '',
-            variants: product.variants || [],
-            images: product.images.map(img => ({ url: img.url, _id: img._id })) || []
-          });
+          const cachedProduct = ProductService.getCachedData(`product_${id}`);
+          if (cachedProduct) {
+            setFormData({
+              name: cachedProduct.product.name,
+              sku: cachedProduct.product.sku,
+              price: cachedProduct.product.price,
+              stock: cachedProduct.product.stock,
+              status: cachedProduct.product.status,
+              category: cachedProduct.product.category,
+              categoryId: cachedProduct.product.categoryId,
+              description: cachedProduct.product.description,
+              scent_notes: cachedProduct.product.scent_notes,
+              ingredients: cachedProduct.product.ingredients,
+              variants: cachedProduct.product.variants,
+              images: cachedProduct.product.images,
+            });
+          } else {
+            const { product } = await ProductService.getProduct(id);
+            setFormData({
+              name: product.name || '',
+              sku: product.sku || '',
+              price: product.price || '',
+              stock: product.stock || '',
+              status: product.status || 'published',
+              category: product.category || '',
+              categoryId: product.categoryId || '',
+              description: product.description || '',
+              scent_notes: product.scent_notes || [],
+              ingredients: product.ingredients || '',
+              variants: product.variants || [],
+              images: product.images.map(img => ({ url: img.url, _id: img._id, isMain: img.isMain || false })) || [],
+            });
+          }
         }
       } catch (err) {
         addToast(err.message, 'error');
@@ -68,17 +96,13 @@ const ProductFormPage = () => {
         setLoading(false);
       }
     };
-
     fetchData();
   }, [id, isEditMode, isViewMode]);
 
   const handleChange = (e) => {
     if (isViewMode) return;
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleAddScentNote = () => {
@@ -86,7 +110,7 @@ const ProductFormPage = () => {
     if (newScentNote.trim()) {
       setFormData(prev => ({
         ...prev,
-        scent_notes: [...prev.scent_notes, newScentNote.trim()]
+        scent_notes: [...prev.scent_notes, newScentNote.trim()],
       }));
       setNewScentNote('');
     }
@@ -96,17 +120,14 @@ const ProductFormPage = () => {
     if (isViewMode) return;
     setFormData(prev => ({
       ...prev,
-      scent_notes: prev.scent_notes.filter((_, i) => i !== index)
+      scent_notes: prev.scent_notes.filter((_, i) => i !== index),
     }));
   };
 
   const handleVariantChange = (e) => {
     if (isViewMode) return;
     const { name, value } = e.target;
-    setNewVariant(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setNewVariant(prev => ({ ...prev, [name]: value }));
   };
 
   const handleAddVariant = () => {
@@ -114,7 +135,7 @@ const ProductFormPage = () => {
     if (newVariant.size && newVariant.price && newVariant.stock) {
       setFormData(prev => ({
         ...prev,
-        variants: [...prev.variants, { ...newVariant, id: Date.now() }]
+        variants: [...prev.variants, { ...newVariant, id: Date.now() }],
       }));
       setNewVariant({ size: '', price: '', stock: '' });
     }
@@ -124,12 +145,9 @@ const ProductFormPage = () => {
     if (isViewMode) return;
     setFormData(prev => ({
       ...prev,
-      variants: prev.variants.filter(variant => variant.id !== id)
+      variants: prev.variants.filter(variant => variant.id !== id),
     }));
   };
-
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
 
   const compressImage = async (file) => {
     return new Promise((resolve) => {
@@ -144,7 +162,7 @@ const ProductFormPage = () => {
           const MAX_HEIGHT = 1200;
           let width = img.width;
           let height = img.height;
-          
+
           if (width > height) {
             if (width > MAX_WIDTH) {
               height *= MAX_WIDTH / width;
@@ -156,19 +174,23 @@ const ProductFormPage = () => {
               height = MAX_HEIGHT;
             }
           }
-          
+
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, width, height);
-          
-          canvas.toBlob((blob) => {
-            const compressedFile = new File([blob], file.name, {
-              type: 'image/jpeg',
-              lastModified: Date.now()
-            });
-            resolve(compressedFile);
-          }, 'image/jpeg', 0.7); // 0.7 quality (70%)
+
+          canvas.toBlob(
+            (blob) => {
+              const compressedFile = new File([blob], file.name, {
+                type: 'image/jpeg',
+                lastModified: Date.now(),
+              });
+              resolve(compressedFile);
+            },
+            'image/jpeg',
+            0.7
+          );
         };
       };
     });
@@ -177,49 +199,44 @@ const ProductFormPage = () => {
   const handleImageUpload = async (e) => {
     if (isViewMode) return;
     const files = Array.from(e.target.files);
-    
     if (files.length === 0) return;
-    
+
     setIsUploading(true);
     setUploadProgress(0);
-    
+
     try {
-      // Compress images before upload
       const compressPromises = files.map(file => compressImage(file));
       const compressedFiles = await Promise.all(compressPromises);
-      
       setImageFiles(prev => [...prev, ...compressedFiles]);
-      
+
       if (isEditMode) {
         const formData = new FormData();
         compressedFiles.forEach(file => formData.append('images', file));
-        
-        // Create custom axios instance with upload progress
         const response = await ProductService.uploadProductImages(id, formData, (progressEvent) => {
           const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           setUploadProgress(percentCompleted);
         });
-        
         setFormData(prev => ({
           ...prev,
-          images: response.product.images.map(img => ({ 
-            url: img.url, 
+          images: response.product.images.map(img => ({
+            url: img.url,
             _id: img._id,
-            isMain: img.isMain || false
-          }))
+            isMain: img.isMain || false,
+          })),
         }));
-        
         addToast('Images uploaded successfully', 'success');
+        ProductService.clearCache();
+        DashboardService.clearCache();
+        setNeedsRefresh(true);
       } else {
-        const newImageUrls = compressedFiles.map(file => ({ 
-          url: URL.createObjectURL(file), 
+        const newImageUrls = compressedFiles.map(file => ({
+          url: URL.createObjectURL(file),
           _id: null,
-          isMain: formData.images.length === 0 // First image is main by default
+          isMain: formData.images.length === 0,
         }));
-        
         setFormData(prev => ({
           ...prev,
-          images: [...prev.images, ...newImageUrls]
+          images: [...prev.images, ...newImageUrls],
         }));
       }
     } catch (err) {
@@ -242,6 +259,9 @@ const ProductFormPage = () => {
       try {
         await ProductService.deleteProductImage(id, imageId);
         addToast('Image removed successfully', 'success');
+        ProductService.clearCache();
+        DashboardService.clearCache();
+        setNeedsRefresh(true);
       } catch (err) {
         addToast(`Failed to remove image: ${err.message}`, 'error');
       }
@@ -250,22 +270,17 @@ const ProductFormPage = () => {
 
   const handleSetMainImage = async (imageId) => {
     if (isViewMode || !imageId) return;
-    
     try {
       const response = await ProductService.setMainProductImage(id, imageId);
-      
-      // Update the local state to reflect the change
       const updatedImages = formData.images.map(img => ({
         ...img,
-        isMain: img._id === imageId
+        isMain: img._id === imageId,
       }));
-      
-      setFormData(prev => ({
-        ...prev,
-        images: updatedImages
-      }));
-      
+      setFormData(prev => ({ ...prev, images: updatedImages }));
       addToast('Main image updated successfully', 'success');
+      ProductService.clearCache();
+      DashboardService.clearCache();
+      setNeedsRefresh(true);
     } catch (err) {
       addToast(`Failed to set main image: ${err.message}`, 'error');
     }
@@ -273,52 +288,39 @@ const ProductFormPage = () => {
 
   const validateForm = () => {
     const newErrors = {};
-    
-    // Basic validation
     if (!formData.name) newErrors.name = 'Product name is required';
     if (!formData.sku) newErrors.sku = 'SKU is required';
     if (!formData.price) newErrors.price = 'Price is required';
     else if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 0) {
       newErrors.price = 'Price must be a valid positive number';
     }
-    
     if (!formData.stock) newErrors.stock = 'Stock quantity is required';
     else if (isNaN(parseInt(formData.stock)) || parseInt(formData.stock) < 0) {
       newErrors.stock = 'Stock must be a valid positive number';
     }
-    
     if (!formData.categoryId) newErrors.category = 'Category is required';
-    
-    // Validate variants
     if (formData.variants.length > 0) {
       const variantNames = new Set();
       const variantErrors = [];
-      
       formData.variants.forEach((variant, index) => {
         if (variantNames.has(variant.size)) {
           variantErrors.push(`Duplicate variant name: ${variant.size}`);
         }
         variantNames.add(variant.size);
-        
         if (isNaN(parseFloat(variant.price)) || parseFloat(variant.price) < 0) {
           variantErrors.push(`Variant #${index + 1}: Price must be a valid positive number`);
         }
-        
         if (isNaN(parseInt(variant.stock)) || parseInt(variant.stock) < 0) {
           variantErrors.push(`Variant #${index + 1}: Stock must be a valid positive number`);
         }
       });
-      
       if (variantErrors.length > 0) {
         newErrors.variants = variantErrors;
       }
     }
-    
-    // Validate images
     if (formData.images.length === 0 && imageFiles.length === 0) {
       newErrors.images = 'At least one product image is required';
     }
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -326,7 +328,6 @@ const ProductFormPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isViewMode) return;
-
     if (validateForm()) {
       try {
         const payload = {
@@ -340,14 +341,14 @@ const ProductFormPage = () => {
           scentNotes: {
             top: formData.scent_notes.slice(0, Math.ceil(formData.scent_notes.length / 3)),
             middle: formData.scent_notes.slice(Math.ceil(formData.scent_notes.length / 3), Math.ceil(formData.scent_notes.length * 2 / 3)),
-            base: formData.scent_notes.slice(Math.ceil(formData.scent_notes.length * 2 / 3))
+            base: formData.scent_notes.slice(Math.ceil(formData.scent_notes.length * 2 / 3)),
           },
           ingredients: formData.ingredients.split(',').map(item => item.trim()).filter(Boolean),
           variants: formData.variants.map(variant => ({
             size: variant.size,
             priceAdjustment: parseFloat(variant.price) - parseFloat(formData.price),
-            stockQuantity: parseInt(variant.stock)
-          }))
+            stockQuantity: parseInt(variant.stock),
+          })),
         };
 
         let response;
@@ -363,6 +364,9 @@ const ProductFormPage = () => {
           }
           addToast('Product created successfully', 'success');
         }
+        ProductService.clearCache();
+        DashboardService.clearCache();
+        setNeedsRefresh(true);
         navigate('/admin/products');
       } catch (err) {
         addToast(err.toString(), 'error');
@@ -376,6 +380,9 @@ const ProductFormPage = () => {
       try {
         await ProductService.deleteProduct(id);
         addToast('Product deleted successfully', 'success');
+        ProductService.clearCache();
+        DashboardService.clearCache();
+        setNeedsRefresh(true);
         navigate('/admin/products');
       } catch (err) {
         addToast(err.message, 'error');
@@ -390,7 +397,6 @@ const ProductFormPage = () => {
           {isViewMode ? 'View Product' : isEditMode ? 'Edit Product' : 'Add New Product'} | Scenture Lagos Admin
         </title>
       </Helmet>
-
       <div className="space-y-6 max-w-7xl mx-auto px-0 py-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="flex items-center">
@@ -509,58 +515,58 @@ const ProductFormPage = () => {
                             disabled={isEditMode}
                           />
                           {isCreateMode && (
-                           <Button
-                            type="button"
-                            onClick={async () => {
-                              setIsGenerating(true);
-                              try {
-                                if (!formData.categoryId) {
-                                  addToast('Select a category first', 'error');
-                                  return;
+                            <Button
+                              type="button"
+                              onClick={async () => {
+                                setIsGenerating(true);
+                                try {
+                                  if (!formData.categoryId) {
+                                    addToast('Select a category first', 'error');
+                                    return;
+                                  }
+                                  const response = await ProductService.generateSKU(formData.categoryId);
+                                  const sku = response.sku;
+                                  if (!sku) {
+                                    throw new Error('No SKU returned from server');
+                                  }
+                                  setFormData(prev => ({ ...prev, sku }));
+                                } catch (err) {
+                                  addToast(err.message || 'Failed to generate SKU', 'error');
+                                } finally {
+                                  setIsGenerating(false);
                                 }
-                                const response = await ProductService.generateSKU(formData.categoryId);
-                                const sku = response.data?.sku; // Extract sku from response.data
-                                if (!sku) {
-                                  throw new Error('No SKU returned from server');
-                                }
-                                setFormData(prev => ({ ...prev, sku }));
-                              } catch (err) {
-                                addToast(err.toString() || 'Failed to generate SKU', 'error');
-                              } finally {
-                                setIsGenerating(false);
-                              }
-                            }}
-                            className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800"
-                            disabled={isGenerating}
-                          >
-                            {isGenerating ? (
-                              <>
-                                <svg
-                                  className="animate-spin h-5 w-5 mr-2 text-white"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <circle
-                                    className="opacity-25"
-                                    cx="12"
-                                    cy="12"
-                                    r="10"
-                                    stroke="currentColor"
-                                    strokeWidth="4"
-                                  ></circle>
-                                  <path
-                                    className="opacity-75"
-                                    fill="currentColor"
-                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                                  ></path>
-                                </svg>
-                                Generating...
-                              </>
-                            ) : (
-                              'Generate SKU'
-                            )}
-                          </Button>
+                              }}
+                              className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800"
+                              disabled={isGenerating}
+                            >
+                              {isGenerating ? (
+                                <>
+                                  <svg
+                                    className="animate-spin h-5 w-5 mr-2 text-white"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <circle
+                                      className="opacity-25"
+                                      cx="12"
+                                      cy="12"
+                                      r="10"
+                                      stroke="currentColor"
+                                      strokeWidth="4"
+                                    ></circle>
+                                    <path
+                                      className="opacity-75"
+                                      fill="currentColor"
+                                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                    ></path>
+                                  </svg>
+                                  Generating...
+                                </>
+                              ) : (
+                                'Generate SKU'
+                              )}
+                            </Button>
                           )}
                         </div>
                       )}
@@ -578,11 +584,13 @@ const ProductFormPage = () => {
                             id="categoryId"
                             name="categoryId"
                             value={formData.categoryId}
-                            onChange={(e) => setFormData(prev => ({
-                              ...prev,
-                              categoryId: e.target.value,
-                              category: categories.find(cat => cat.id === e.target.value)?.name || ''
-                            }))}
+                            onChange={(e) =>
+                              setFormData(prev => ({
+                                ...prev,
+                                categoryId: e.target.value,
+                                category: categories.find(cat => cat.id === e.target.value)?.name || '',
+                              }))
+                            }
                             className={`w-full px-4 py-2 border ${errors.category ? 'border-red-300' : 'border-slate-200'} rounded-md focus:outline-none focus:ring-2 focus:ring-slate-900/10`}
                             disabled={isViewMode}
                           >
@@ -868,11 +876,7 @@ const ProductFormPage = () => {
                     {formData.images.map((image, index) => (
                       <div key={index} className="relative group">
                         <div className={`aspect-square bg-slate-100 rounded-md overflow-hidden ${image.isMain ? 'ring-2 ring-blue-500' : ''}`}>
-                          <img
-                            src={image.url}
-                            alt={`Product ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
+                          <img src={image.url} alt={`Product ${index + 1}`} className="w-full h-full object-cover" />
                           {image.isMain && (
                             <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-md">
                               Main Image
@@ -903,7 +907,6 @@ const ProductFormPage = () => {
                         )}
                       </div>
                     ))}
-
                     {!isViewMode && formData.images.length < 4 && (
                       <label className="aspect-square bg-slate-50 border-2 border-dashed border-slate-200 rounded-md flex flex-col items-center justify-center cursor-pointer hover:bg-slate-100 relative">
                         {isUploading ? (
@@ -911,14 +914,14 @@ const ProductFormPage = () => {
                             <div className="w-16 h-16 mb-2 relative">
                               <svg className="w-full h-full" viewBox="0 0 36 36">
                                 <circle cx="18" cy="18" r="16" fill="none" className="stroke-slate-200" strokeWidth="2"></circle>
-                                <circle 
-                                  cx="18" 
-                                  cy="18" 
-                                  r="16" 
-                                  fill="none" 
-                                  className="stroke-blue-500" 
-                                  strokeWidth="2" 
-                                  strokeDasharray="100" 
+                                <circle
+                                  cx="18"
+                                  cy="18"
+                                  r="16"
+                                  fill="none"
+                                  className="stroke-blue-500"
+                                  strokeWidth="2"
+                                  strokeDasharray="100"
                                   strokeDashoffset={100 - uploadProgress}
                                   transform="rotate(-90 18 18)"
                                 ></circle>
@@ -947,21 +950,24 @@ const ProductFormPage = () => {
                       </label>
                     )}
                   </div>
-
-                {formData.images.length === 0 && (
-                <div className="text-center py-8">
-                  <ImageIcon size={48} className="mx-auto text-slate-300 mb-2" />
-                  <p className="text-slate-500">No images uploaded yet</p>
-                  <p className="text-sm text-slate-400 mt-1">Upload high-quality product images</p>
-                </div>
-              )}
+                  {formData.images.length === 0 && (
+                    <div className="text-center py-8">
+                      <ImageIcon size={48} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-slate-500">No images uploaded yet</p>
+                      <p className="text-sm text-slate-400 mt-1">Upload high-quality product images</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
               {!isViewMode && (
                 <Card>
                   <CardContent className="p-6">
-                    <Button type="submit" onClick={handleSubmit} className="w-full flex items-center justify-center bg-slate-900 text-white hover:bg-slate-800">
+                    <Button
+                      type="submit"
+                      onClick={handleSubmit}
+                      className="w-full flex items-center justify-center bg-slate-900 text-white hover:bg-slate-800"
+                    >
                       <Save size={16} className="mr-2" />
                       {isEditMode ? 'Update Product' : 'Create Product'}
                     </Button>

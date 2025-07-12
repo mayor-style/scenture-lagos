@@ -5,11 +5,12 @@ import { ArrowLeft, CreditCard, Check, Shield, Truck, Mail, Phone } from 'lucide
 import { Button } from '../components/ui/Button';
 import { formatPrice } from '../lib/utils';
 import { useCart } from '../contexts/CartContext';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../components/ui/Toast';
 
 const CheckoutPage = () => {
   const { cart, loading } = useCart();
   const navigate = useNavigate();
+  const {addToast} = useToast();
 
   // Form state
   const [formStep, setFormStep] = useState('shipping');
@@ -63,7 +64,7 @@ const CheckoutPage = () => {
   if (!cart || !cart.items || cart.items.length === 0) {
     // Using setTimeout to avoid immediate redirect during render
     setTimeout(() => {
-      toast.error("Your cart is empty. Please add items before checkout.");
+      addToast("Your cart is empty. Please add items before checkout.", "error");
       navigate('/cart');
     }, 0);
     

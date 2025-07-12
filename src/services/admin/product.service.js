@@ -1,61 +1,74 @@
-// File: ProductService.js
+// src/services/admin/product.service.js
 import api from '../api';
 
-// Sample fallback data for development
-const FALLBACK_PRODUCTS = [
-  {
-    id: '1',
-    name: 'Lavender Dreams Candle',
-    sku: 'CAN-001',
-    price: 12500,
-    stock: 45,
-    categoryName: 'Candles',
-    status: 'published',
-    images: ['/images/product1.jpg'],
-    variants: [
-      { id: 1, size: '8oz', price: 12500, stock: 25 },
-      { id: 2, size: '12oz', price: 18500, stock: 20 }
-    ]
-  },
-  {
-    id: '2',
-    name: 'Ocean Breeze Diffuser',
-    sku: 'DIF-001',
-    price: 15000,
-    stock: 10,
-    categoryName: 'Diffusers',
-    status: 'published',
-    images: ['/images/product2.jpg'],
-    variants: []
-  }
-];
-
-const FALLBACK_CATEGORIES = [
-  { id: '1', name: 'Candles' },
-  { id: '2', name: 'Room Sprays' },
-  { id: '3', name: 'Diffusers' },
-  { id: '4', name: 'Gift Sets' }
-];
+const cache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const ProductService = {
   getAllProducts: async (params = {}) => {
+    const cacheKey = `products_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get('/admin/products', { params });
-      const { data, total } = response.data;
-      return {
-        data: data || [],
-        total: total || 0
+      const { data, total } = response.data || { data: [], total: 0 };
+      const result = {
+        data: data.map(product => ({
+          id: product.id,
+          name: product.name || '',
+          sku: product.sku || '',
+          price: product.price || 0,
+          stock: product.stockQuantity || 0,
+          categoryName: product.category?.name || 'Uncategorized',
+          stockStatus: product.stockQuantity === 0 ? 'Out of Stock' : product.stockQuantity < 10 ? 'Low Stock' : 'Active',
+          status: product.status || 'published',
+          images: product.images || [],
+          variants: product.variants || [],
+        })),
+        total: total || 0,
       };
+      cache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
     } catch (error) {
       console.error(`Error fetching products: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to fetch products');
+      const defaultData = { data: [], total: 0 };
+      cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
+      return defaultData;
     }
   },
 
   getProduct: async (id) => {
+    const cacheKey = `product_${id}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get(`/admin/products/${id}`);
-      return response.data;
+      const product = response.data?.product || {};
+      const result = {
+        product: {
+          _id: product._id || id,
+          name: product.name || '',
+          sku: product.sku || '',
+          price: product.price || 0,
+          stock: product.stockQuantity || 0,
+          status: product.status || 'published',
+          category: product.category?.name || '',
+          categoryId: product.category?._id || '',
+          description: product.description || '',
+          scent_notes: product.scentNotes?.top.concat(product.scentNotes?.middle || [], product.scentNotes?.base || []) || [],
+          ingredients: product.ingredients?.join(', ') || '',
+          variants: product.variants || [],
+          images: product.images || [],
+        },
+      };
+      cache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
     } catch (error) {
       console.error(`Error fetching product: ${error.response?.data?.message || error.message}`);
       throw new Error(error.response?.data?.message || 'Failed to fetch product');
@@ -63,69 +76,65 @@ const ProductService = {
   },
 
   getAllCategories: async (params = {}) => {
+    const cacheKey = `categories_${JSON.stringify(params)}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
-      // Check if tree view is requested
-      if (params.tree === true) {
-        return ProductService.getCategoryTree();
-      }
-      
-      // Only use cache if no query parameters are provided
-      if (Object.keys(params).length === 0) {
-        const cached = localStorage.getItem('categories');
-        if (cached) {
-          const { data, timestamp } = JSON.parse(cached);
-          if (Date.now() - timestamp < 3600000) { // 1 hour TTL
-            return { data };
-          }
-        }
-      }
-      
       const response = await api.get('/admin/categories', { params });
-      const { data, total } = response.data;
-      
-      // Only cache the full category list without filters
-      if (Object.keys(params).length === 0) {
-        localStorage.setItem('categories', JSON.stringify({ data, timestamp: Date.now() }));
-      }
-      
-      return { 
-        data: data || [],
-        total: total || 0
+      const { data, total } = response.data || { data: [], total: 0 };
+      const result = {
+        data: data.map(category => ({
+          id: category._id,
+          name: category.name || 'Uncategorized',
+        })),
+        total: total || 0,
       };
+      cache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
     } catch (error) {
       console.error(`Error fetching categories: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to fetch categories');
+      const defaultData = { data: [], total: 0 };
+      cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
+      return defaultData;
     }
   },
-  
-getCategoryTree: async () => {
-  try {
-    // Check cache first
-    const cached = localStorage.getItem('categoryTree');
-    if (cached) {
-      const { data, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < 3600000) { // 1 hour TTL
-        return { data };
-      }
+
+  getCategoryTree: async () => {
+    const cacheKey = 'categoryTree';
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
     }
 
-    const response = await api.get('/admin/categories', { params: { tree: true } });
-    const categories = response.data.data?.categories || []; // Extract categories correctly
+    try {
+      const response = await api.get('/admin/categories', { params: { tree: true } });
+      const categories = response.data?.data?.categories || [];
+      const result = { data: categories };
+      cache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
+    } catch (error) {
+      console.error(`Error fetching category tree: ${error.response?.data?.message || error.message}`);
+      const defaultData = { data: [] };
+      cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
+      return defaultData;
+    }
+  },
 
-    // Cache the category tree
-    localStorage.setItem('categoryTree', JSON.stringify({ data: categories, timestamp: Date.now() }));
-
-    return { data: categories };
-  } catch (error) {
-    console.error(`Error fetching category tree: ${error.response?.data?.message || error.message}`);
-    throw new Error(error.response?.data?.message || 'Failed to fetch category tree');
-  }
-},
-  
   getCategory: async (id) => {
+    const cacheKey = `category_${id}`;
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+
     try {
       const response = await api.get(`/admin/categories/${id}`);
-      return response.data;
+      const result = response.data || {};
+      cache.set(cacheKey, { data: result, timestamp: Date.now() });
+      return result;
     } catch (error) {
       console.error(`Error fetching category: ${error.response?.data?.message || error.message}`);
       throw new Error(error.response?.data?.message || 'Failed to fetch category');
@@ -135,6 +144,7 @@ getCategoryTree: async () => {
   createProduct: async (productData) => {
     try {
       const response = await api.post('/admin/products', productData);
+      cache.clear(); // Clear cache to force refresh after create
       return response.data;
     } catch (error) {
       console.error(`Error creating product: ${error.response?.data?.error || error.message}`);
@@ -142,9 +152,10 @@ getCategoryTree: async () => {
     }
   },
 
-    updateProduct: async (id, productData) => {
+  updateProduct: async (id, productData) => {
     try {
       const response = await api.put(`/admin/products/${id}`, productData);
+      cache.clear(); // Clear cache to force refresh after update
       return response.data;
     } catch (error) {
       console.error(`Error updating product: ${error.response?.data?.message || error.message}`);
@@ -152,9 +163,10 @@ getCategoryTree: async () => {
     }
   },
 
-   deleteProduct: async (id) => {
+  deleteProduct: async (id) => {
     try {
       const response = await api.delete(`/admin/products/${id}`);
+      cache.clear(); // Clear cache to force refresh after delete
       return response.data;
     } catch (error) {
       console.error(`Error deleting product: ${error.response?.data?.message || error.message}`);
@@ -162,14 +174,13 @@ getCategoryTree: async () => {
     }
   },
 
-   uploadProductImages: async (productId, formData, onUploadProgress) => {
+  uploadProductImages: async (productId, formData, onUploadProgress) => {
     try {
       const response = await api.post(`/admin/products/${productId}/images`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress: onUploadProgress ? (progressEvent) => {
-          onUploadProgress(progressEvent);
-        } : undefined
+        onUploadProgress,
       });
+      cache.clear(); // Clear cache to force refresh after image upload
       return response.data;
     } catch (error) {
       console.error(`Error uploading product images: ${error.response?.data?.error || error.message}`);
@@ -180,6 +191,7 @@ getCategoryTree: async () => {
   deleteProductImage: async (productId, imageId) => {
     try {
       const response = await api.delete(`/admin/products/${productId}/images/${imageId}`);
+      cache.clear(); // Clear cache to force refresh after image delete
       return response.data;
     } catch (error) {
       console.error(`Error deleting product image: ${error.response?.data?.message || error.message}`);
@@ -190,6 +202,7 @@ getCategoryTree: async () => {
   setMainProductImage: async (productId, imageId) => {
     try {
       const response = await api.put(`/admin/products/${productId}/images/${imageId}/main`);
+      cache.clear(); // Clear cache to force refresh after setting main image
       return response.data;
     } catch (error) {
       console.error(`Error setting main product image: ${error.response?.data?.message || error.message}`);
@@ -200,6 +213,7 @@ getCategoryTree: async () => {
   createCategory: async (categoryData) => {
     try {
       const response = await api.post('/admin/categories', categoryData);
+      cache.clear(); // Clear cache to force refresh after category create
       return response.data;
     } catch (error) {
       console.error(`Error creating category: ${error.response?.status || error.message}`);
@@ -210,6 +224,7 @@ getCategoryTree: async () => {
   updateCategory: async (id, categoryData) => {
     try {
       const response = await api.put(`/admin/categories/${id}`, categoryData);
+      cache.clear(); // Clear cache to force refresh after category update
       return response.data;
     } catch (error) {
       console.error(`Error updating category: ${error.response?.status || error.message}`);
@@ -220,6 +235,7 @@ getCategoryTree: async () => {
   deleteCategory: async (id) => {
     try {
       const response = await api.delete(`/admin/categories/${id}`);
+      cache.clear(); // Clear cache to force refresh after category delete
       return response.data;
     } catch (error) {
       console.error(`Error deleting category: ${error.response?.status || error.message}`);
@@ -227,8 +243,7 @@ getCategoryTree: async () => {
     }
   },
 
-    generateSKU: async (categoryId) => {
-      console.log('GENETAING SKUUUU')
+  generateSKU: async (categoryId) => {
     try {
       const response = await api.get('/admin/products/sku', { params: { categoryId } });
       return response.data;
@@ -236,7 +251,19 @@ getCategoryTree: async () => {
       console.error(`Error generating SKU: ${error.response?.data?.error || error.message}`);
       throw new Error(error.response?.data?.error || 'Failed to generate SKU');
     }
-  }
+  },
+
+  getCachedData: (cacheKey) => {
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+    return null;
+  },
+
+  clearCache: () => {
+    cache.clear();
+  },
 };
 
 export default ProductService;

@@ -1,8 +1,8 @@
+// src/services/admin/dashboard.service.js
 import api from '../api';
 
-// Simple in-memory cache
 const cache = new Map();
-const CACHE_TTL = 60000; // 60 seconds
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const DashboardService = {
   getDashboardSummary: async (params = {}) => {
@@ -14,25 +14,45 @@ const DashboardService = {
 
     try {
       const response = await api.get('/admin/dashboard/summary', { params });
-      const data = {
-        metrics: {
-          totalSales: response.data.metrics?.totalSales || 0,
-          totalOrders: response.data.metrics?.totalOrders || 0,
-          inventoryValue: response.data.metrics?.inventoryValue || 0,
-          newCustomers: response.data.metrics?.newCustomers || 0,
-          salesGrowth: response.data.metrics?.salesGrowth || 0,
-          ordersGrowth: response.data.metrics?.ordersGrowth || 0,
-          customersGrowth: response.data.metrics?.customersGrowth || 0,
-          lowStockProducts: response.data.metrics?.lowStockProducts || 0
+      const data = response.data || {};
+      const result = {
+        data: {
+          metrics: {
+            totalSales: data.metrics?.totalSales || 0,
+            totalOrders: data.metrics?.totalOrders || 0,
+            inventoryValue: data.metrics?.inventoryValue || 0,
+            newCustomers: data.metrics?.newCustomers || 0,
+            salesGrowth: data.metrics?.salesGrowth || 0,
+            ordersGrowth: data.metrics?.ordersGrowth || 0,
+            customersGrowth: data.metrics?.customersGrowth || 0,
+            lowStockProducts: data.metrics?.lowStockProducts || 0,
+          },
+          charts: data.charts || { salesChart: [], orderStatusChart: [] },
+          dateRange: data.dateRange || {},
         },
-        charts: response.data.charts || { salesChart: [], orderStatusChart: [] },
-        dateRange: response.data.dateRange || {}
       };
-      cache.set(cacheKey, { data, timestamp: Date.now() });
-      return { data };
+      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
+      return result;
     } catch (error) {
-      console.error(`Error fetching dashboard summary: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error fetching dashboard summary: ${error.message}`);
+      const defaultData = {
+        data: {
+          metrics: {
+            totalSales: 0,
+            totalOrders: 0,
+            inventoryValue: 0,
+            newCustomers: 0,
+            salesGrowth: 0,
+            ordersGrowth: 0,
+            customersGrowth: 0,
+            lowStockProducts: 0,
+          },
+          charts: { salesChart: [], orderStatusChart: [] },
+          dateRange: {},
+        },
+      };
+      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
+      return defaultData;
     }
   },
 
@@ -45,12 +65,15 @@ const DashboardService = {
 
     try {
       const response = await api.get('/admin/dashboard/recent-orders', { params });
-      const data = { orders: response.data.orders || [] };
-      cache.set(cacheKey, { data, timestamp: Date.now() });
-      return { data };
+      const data = response.data || {};
+      const result = { data: { orders: data.orders || [] } };
+      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
+      return result;
     } catch (error) {
-      console.error(`Error fetching recent orders: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error fetching recent orders: ${error.message}`);
+      const defaultData = { data: { orders: [] } };
+      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
+      return defaultData;
     }
   },
 
@@ -63,12 +86,15 @@ const DashboardService = {
 
     try {
       const response = await api.get('/admin/dashboard/activity-feed', { params });
-      const data = { activities: response.data.activities || [] };
-      cache.set(cacheKey, { data, timestamp: Date.now() });
-      return { data };
+      const data = response.data || {};
+      const result = { data: { activities: data.activities || [] } };
+      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
+      return result;
     } catch (error) {
-      console.error(`Error fetching activity feed: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error fetching activity feed: ${error.message}`);
+      const defaultData = { data: { activities: [] } };
+      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
+      return defaultData;
     }
   },
 
@@ -81,8 +107,8 @@ const DashboardService = {
 
     try {
       const response = await api.get('/admin/dashboard/sales-data', { params });
-      const salesChart = response.data.salesChart || [];
-      const formattedData = salesChart.map(item => {
+      const salesChart = response.data?.salesChart || [];
+      const formattedData = salesChart.map((item) => {
         const date = new Date(item.date);
         if (!item.date || isNaN(date.getTime())) {
           return { name: 'Unknown', sales: 0 };
@@ -103,14 +129,28 @@ const DashboardService = {
         }
         return { name: displayName, sales: item.sales || 0 };
       });
-      const data = { data: formattedData };
-      cache.set(cacheKey, { data, timestamp: Date.now() });
-      return data;
+      const result = { data: formattedData };
+      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
+      return result;
     } catch (error) {
-      console.error(`Error fetching sales data: ${error.response?.status || error.message}`);
-      throw error;
+      console.error(`Error fetching sales data: ${error.message}`);
+      const defaultData = { data: [] };
+      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
+      return defaultData;
     }
-  }
+  },
+
+  getCachedData: (cacheKey) => {
+    const cached = cache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+    return null;
+  },
+
+  clearCache: () => {
+    cache.clear();
+  },
 };
 
 export default DashboardService;
