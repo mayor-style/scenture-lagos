@@ -1,13 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import CartService from '../services/cart.service';
 import { useAuth } from './AuthContext';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../components/ui/Toast'; // Import custom toast
 
 const CartContext = createContext();
 
 export const useCart = () => useContext(CartContext);
 
 export const CartProvider = ({ children }) => {
+  const { addToast } = useToast(); // Initialize custom toast
   const { isAuthenticated } = useAuth();
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,14 +40,7 @@ export const CartProvider = ({ children }) => {
     } catch (err) {
       console.error('Error initializing cart:', err);
       setError('Failed to load cart. Please try again.');
-      setCart({
-        items: [],
-        totalItems: 0,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        coupon: null
-      });
+      addToast('Failed to load cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -120,10 +114,11 @@ export const CartProvider = ({ children }) => {
           total
         });
       }
+      addToast('Item added to cart', 'success');
     } catch (err) {
       console.error('Error adding to cart:', err);
       setError('Failed to add item to cart. Please try again.');
-      toast.error('Failed to add item to cart');
+      addToast('Failed to add item to cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -165,10 +160,11 @@ export const CartProvider = ({ children }) => {
           total
         });
       }
+      addToast('Cart updated successfully', 'success');
     } catch (err) {
       console.error('Error updating cart item:', err);
       setError('Failed to update cart. Please try again.');
-      toast.error('Failed to update cart');
+      addToast('Failed to update cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -198,11 +194,11 @@ export const CartProvider = ({ children }) => {
         });
       }
       
-      toast.success('Item removed from cart');
+      addToast('Item removed from cart', 'success');
     } catch (err) {
       console.error('Error removing from cart:', err);
       setError('Failed to remove item from cart. Please try again.');
-      toast.error('Failed to remove item from cart');
+      addToast('Failed to remove item from cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -226,11 +222,11 @@ export const CartProvider = ({ children }) => {
         coupon: null
       });
       
-      toast.success('Cart cleared');
+      addToast('Cart cleared', 'success');
     } catch (err) {
       console.error('Error clearing cart:', err);
       setError('Failed to clear cart. Please try again.');
-      toast.error('Failed to clear cart');
+      addToast('Failed to clear cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -245,16 +241,16 @@ export const CartProvider = ({ children }) => {
         const cartData = await CartService.applyCoupon({ code });
         setCart(cartData);
       } else {
-        toast.error('Coupon functionality requires login');
+        addToast('Coupon functionality requires login', 'error');
         setError('Please log in to apply coupons');
         return;
       }
       
-      toast.success('Coupon applied successfully');
+      addToast('Coupon applied successfully', 'success');
     } catch (err) {
       console.error('Error applying coupon:', err);
       setError('Failed to apply coupon. Please check the code and try again.');
-      toast.error('Invalid coupon code');
+      addToast('Invalid coupon code', 'error');
     } finally {
       setLoading(false);
     }
@@ -277,11 +273,11 @@ export const CartProvider = ({ children }) => {
         });
       }
       
-      toast.success('Coupon removed');
+      addToast('Coupon removed', 'success');
     } catch (err) {
       console.error('Error removing coupon:', err);
       setError('Failed to remove coupon. Please try again.');
-      toast.error('Failed to remove coupon');
+      addToast('Failed to remove coupon', 'error');
     } finally {
       setLoading(false);
     }
@@ -307,11 +303,11 @@ export const CartProvider = ({ children }) => {
       
       localStorage.removeItem('cart');
       
-      toast.success('Cart updated with your items');
+      addToast('Cart updated with your items', 'success');
     } catch (err) {
       console.error('Error merging carts:', err);
       setError('Failed to update your cart. Please try again.');
-      toast.error('Failed to update cart');
+      addToast('Failed to update cart', 'error');
     } finally {
       setLoading(false);
     }

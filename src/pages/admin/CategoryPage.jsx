@@ -16,7 +16,7 @@ import {
   List,
   Grid
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast';
 
 import ProductService from '../../services/admin/product.service';
 import { Button } from '../../components/ui/Button';
@@ -46,6 +46,7 @@ const CategoryPage = () => {
   const [categoryToDelete, setCategoryToDelete] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [viewMode, setViewMode] = useState(queryParams.get('view') || 'list');
+  const {addToast} = useToast()
 
   // Fetch categories
   useEffect(() => {
@@ -107,11 +108,11 @@ const CategoryPage = () => {
     
     try {
       await ProductService.deleteCategory(categoryToDelete._id);
-      toast.success('Category deleted successfully');
+      addToast('Category deleted successfully', 'success');
       setRefreshTrigger(prev => prev + 1);
     } catch (err) {
       console.error('Error deleting category:', err);
-      toast.error(err.response?.data?.message || 'Failed to delete category');
+      addToast(err.response?.data?.message || 'Failed to delete category', 'error');
     } finally {
       setDeleteModalOpen(false);
       setCategoryToDelete(null);
@@ -139,8 +140,8 @@ const CategoryPage = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-heading font-medium text-secondary">Categories</h1>
-            <p className="text-secondary/70 mt-1">Manage product categories</p>
+            <h1 className="dashboardHeading">Categories</h1>
+            <p className="dashboardSubHeading">Manage product categories</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center border border-slate-200 rounded-md overflow-hidden mr-2">
@@ -253,10 +254,10 @@ const CategoryPage = () => {
                       <option value="false">Not Featured</option>
                     </select>
                   </div>
-                  <div className="flex items-end gap-2">
+                  <div className="flex flex-col items-end gap-2">
                     <Button
                       variant="default"
-                      className="flex items-center"
+                      className="flex w-full items-center"
                       onClick={handleApplyFilters}
                     >
                       <Filter size={16} className="mr-2" />
@@ -264,7 +265,7 @@ const CategoryPage = () => {
                     </Button>
                     <Button
                       variant="outline"
-                      className="flex items-center"
+                      className="flex w-full items-center"
                       onClick={handleClearFilters}
                     >
                       <X size={16} className="mr-2" />

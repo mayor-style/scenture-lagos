@@ -1,4 +1,3 @@
-// File: src/pages/admin/ProductFormPage.jsx
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -6,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '../../components/ui/Button';
 import { ArrowLeft, Save, Trash2, Plus, X, Upload, Image as ImageIcon, Eye } from 'lucide-react';
 import ProductService from '../../services/admin/product.service';
-import toast from 'react-hot-toast';
+import { useToast } from '../../components/Toast'; // Import custom toast
 import { formatPrice } from '../../lib/utils';
 
 const ProductFormPage = () => {
@@ -15,6 +14,7 @@ const ProductFormPage = () => {
   const isEditMode = Boolean(id && action === 'edit');
   const isViewMode = Boolean(id && action === 'view');
   const isCreateMode = !id && !action;
+  const { addToast } = useToast(); // Initialize custom toast
 
   const [formData, setFormData] = useState({
     name: '',
@@ -63,7 +63,7 @@ const ProductFormPage = () => {
           });
         }
       } catch (err) {
-        toast.error(err.message);
+        addToast(err.message, 'error');
       } finally {
         setLoading(false);
       }
@@ -209,7 +209,7 @@ const ProductFormPage = () => {
           }))
         }));
         
-        toast.success('Images uploaded successfully');
+        addToast('Images uploaded successfully', 'success');
       } else {
         const newImageUrls = compressedFiles.map(file => ({ 
           url: URL.createObjectURL(file), 
@@ -223,7 +223,7 @@ const ProductFormPage = () => {
         }));
       }
     } catch (err) {
-      toast.error(`Failed to upload images: ${err.message}`);
+      addToast(`Failed to upload images: ${err.message}`, 'error');
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -241,9 +241,9 @@ const ProductFormPage = () => {
     if (isEditMode && imageId) {
       try {
         await ProductService.deleteProductImage(id, imageId);
-        toast.success('Image removed successfully');
+        addToast('Image removed successfully', 'success');
       } catch (err) {
-        toast.error(`Failed to remove image: ${err.message}`);
+        addToast(`Failed to remove image: ${err.message}`, 'error');
       }
     }
   };
@@ -265,9 +265,9 @@ const ProductFormPage = () => {
         images: updatedImages
       }));
       
-      toast.success('Main image updated successfully');
+      addToast('Main image updated successfully', 'success');
     } catch (err) {
-      toast.error(`Failed to set main image: ${err.message}`);
+      addToast(`Failed to set main image: ${err.message}`, 'error');
     }
   };
 
@@ -353,20 +353,19 @@ const ProductFormPage = () => {
         let response;
         if (isEditMode) {
           response = await ProductService.updateProduct(id, payload);
-          toast.success('Product updated successfully');
+          addToast('Product updated successfully', 'success');
         } else {
           response = await ProductService.createProduct(payload);
           if (imageFiles.length > 0) {
             const formData = new FormData();
             imageFiles.forEach(file => formData.append('images', file));
-            console.log('res', response)
             await ProductService.uploadProductImages(response.data.product._id, formData);
           }
-          toast.success('Product created successfully');
+          addToast('Product created successfully', 'success');
         }
         navigate('/admin/products');
       } catch (err) {
-        toast.error(err.toString());
+        addToast(err.toString(), 'error');
       }
     }
   };
@@ -376,10 +375,10 @@ const ProductFormPage = () => {
     if (window.confirm('Are you sure you want to delete this product?')) {
       try {
         await ProductService.deleteProduct(id);
-        toast.success('Product deleted successfully');
+        addToast('Product deleted successfully', 'success');
         navigate('/admin/products');
       } catch (err) {
-        toast.error(err.message);
+        addToast(err.message, 'error');
       }
     }
   };
@@ -392,7 +391,7 @@ const ProductFormPage = () => {
         </title>
       </Helmet>
 
-      <div className="space-y-6 max-w-7xl mx-auto px-3 py-8">
+      <div className="space-y-6 max-w-7xl mx-auto px-0 py-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between">
           <div className="flex items-center">
             <Link to="/admin/products" className="mr-4">
@@ -401,10 +400,10 @@ const ProductFormPage = () => {
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-medium text-slate-900">
+              <h1 className="dashboardHeading">
                 {isViewMode ? 'View Product' : isEditMode ? 'Edit Product' : 'Add New Product'}
               </h1>
-              <p className="text-slate-600 mt-1">
+              <p className="dashboardSubHeading">
                 {isViewMode ? 'View product details' : isEditMode ? 'Update product information' : 'Create a new product'}
               </p>
             </div>
@@ -516,7 +515,7 @@ const ProductFormPage = () => {
                               setIsGenerating(true);
                               try {
                                 if (!formData.categoryId) {
-                                  toast.error('Select a category first');
+                                  addToast('Select a category first', 'error');
                                   return;
                                 }
                                 const response = await ProductService.generateSKU(formData.categoryId);
@@ -526,8 +525,7 @@ const ProductFormPage = () => {
                                 }
                                 setFormData(prev => ({ ...prev, sku }));
                               } catch (err) {
-                                
-                                toast.error(err.toString() || 'Failed to generate SKU');
+                                addToast(err.toString() || 'Failed to generate SKU', 'error');
                               } finally {
                                 setIsGenerating(false);
                               }
@@ -752,7 +750,7 @@ const ProductFormPage = () => {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {errors.variants && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-4">
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-3 rounded-md mb-4">
                       <p className="font-medium">Please fix the following issues:</p>
                       <ul className="list-disc pl-5 mt-1 text-sm">
                         {Array.isArray(errors.variants) ? (
@@ -807,7 +805,7 @@ const ProductFormPage = () => {
                   </div>
 
                   {!isViewMode && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                       <div>
                         <input
                           type="text"
@@ -935,7 +933,7 @@ const ProductFormPage = () => {
                           <>
                             <Upload size={24} className="text-slate-400 mb-2" />
                             <span className="text-sm text-slate-500">Upload Image</span>
-                            <span className="text-xs text-slate-400 mt-1">Images will be compressed</span>
+                            <span className="text-xs text-slate-400 text-center mt-1">Images will be compressed</span>
                           </>
                         )}
                         <input

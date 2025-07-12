@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet-async';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { LoadingOverlay } from '../../components/ui/LoadingState';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/Toast'; // Import custom toast
 import SettingsService from '../../services/admin/settings.service';
 import {
   Save,
@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 
 const SettingsPage = () => {
+  const { addToast } = useToast(); // Initialize custom toast
   const [activeTab, setActiveTab] = useState('general');
   const [settings, setSettings] = useState({
     storeName: 'Scenture Lagos',
@@ -88,7 +89,7 @@ const SettingsPage = () => {
         console.error('Error fetching settings:', err);
         const errorMessage = err.response?.data?.error || err.message || 'Failed to load settings';
         setError(errorMessage);
-        toast.error(errorMessage);
+        addToast(errorMessage, 'error');
       } finally {
         setLoading(false);
       }
@@ -113,10 +114,10 @@ const SettingsPage = () => {
         orderPrefix: settings.orderPrefix,
         invoicePrefix: settings.invoicePrefix,
       });
-      toast.success('Settings updated successfully');
+      addToast('Settings updated successfully', 'success');
     } catch (err) {
       console.error('Error saving settings:', err);
-      toast.error(err.response?.data?.error || 'Failed to save settings');
+      addToast(err.response?.data?.error || 'Failed to save settings', 'error');
     } finally {
       setSaving(false);
     }
@@ -128,10 +129,10 @@ const SettingsPage = () => {
       await SettingsService.updateStoreSettings({
         shipping: { zones: settings.shippingZones },
       });
-      toast.success('Shipping settings updated successfully');
+      addToast('Shipping settings updated successfully', 'success');
     } catch (err) {
       console.error('Error saving shipping settings:', err);
-      toast.error(err.response?.data?.error || 'Failed to save shipping settings');
+      addToast(err.response?.data?.error || 'Failed to save shipping settings', 'error');
     } finally {
       setSaving(false);
     }
@@ -151,10 +152,10 @@ const SettingsPage = () => {
           })),
         },
       });
-      toast.success('Payment settings updated successfully');
+      addToast('Payment settings updated successfully', 'success');
     } catch (err) {
       console.error('Error saving payment settings:', err);
-      toast.error(err.response?.data?.error || 'Failed to save payment settings');
+      addToast(err.response?.data?.error || 'Failed to save payment settings', 'error');
     } finally {
       setSaving(false);
     }
@@ -171,7 +172,7 @@ const SettingsPage = () => {
 
   const handleAddUser = async () => {
     if (!newUser.name || !newUser.email || !newUser.password) {
-      toast.error('Please fill all required fields');
+      addToast('Please fill all required fields', 'error');
       return;
     }
     setSaving(true);
@@ -189,10 +190,10 @@ const SettingsPage = () => {
       setAdminUsers(prev => [...prev, response.user]);
       setNewUser({ name: '', email: '', role: 'Editor', password: '' });
       setShowAddUserForm(false);
-      toast.success('User added successfully');
+      addToast('User added successfully', 'success');
     } catch (err) {
       console.error('Error adding user:', err);
-      toast.error(err.response?.data?.error || 'Failed to add user');
+      addToast(err.response?.data?.error || 'Failed to add user', 'error');
     } finally {
       setSaving(false);
     }
@@ -210,7 +211,7 @@ const SettingsPage = () => {
 
   const handleUpdateUser = async () => {
     if (!editingUser.name || !editingUser.email) {
-      toast.error('Please fill all required fields');
+      addToast('Please fill all required fields', 'error');
       return;
     }
     setSaving(true);
@@ -229,10 +230,10 @@ const SettingsPage = () => {
         prev.map(user => (user.id === editingUser.id ? response.user : user))
       );
       setEditingUser(null);
-      toast.success('User updated successfully');
+      addToast('User updated successfully', 'success');
     } catch (err) {
       console.error('Error updating user:', err);
-      toast.error(err.response?.data?.error || 'Failed to update user');
+      addToast(err.response?.data?.error || 'Failed to update user', 'error');
     } finally {
       setSaving(false);
     }
@@ -243,10 +244,10 @@ const SettingsPage = () => {
     try {
       await SettingsService.deleteAdminUser(id);
       setAdminUsers(prev => prev.filter(user => user.id !== id));
-      toast.success('User deleted successfully');
+      addToast('User deleted successfully', 'success');
     } catch (err) {
       console.error('Error deleting user:', err);
-      toast.error(err.response?.data?.error || 'Failed to delete user');
+      addToast(err.response?.data?.error || 'Failed to delete user', 'error');
     } finally {
       setSaving(false);
     }

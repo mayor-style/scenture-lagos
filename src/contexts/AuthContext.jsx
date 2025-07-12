@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../components/ui/Toast';
 import AuthService from '../services/auth.service';
 
 // Create context
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       const response = await AuthService.login(credentials);
       setCurrentUser(response.data);
-      toast.success('Login successful');
+      addToast('Login successful', 'success');
       return response;
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed');
@@ -69,7 +69,7 @@ export const AuthProvider = ({ children }) => {
       setError(null);
       const response = await AuthService.adminLogin(credentials);
        setCurrentUser(response.data);
-      toast.success('Admin login successful');
+      addToast('Admin login successful', 'success');
       return response;
     } catch (err) {
       setError(err.response?.data?.message || 'Admin login failed');
@@ -91,7 +91,7 @@ console.log('current user', currentUser)
       setLoading(true);
       await AuthService.logout();
       setCurrentUser(null);
-      toast.success('Logged out successfully');
+      addToast('Logged out successfully', 'success');
       navigate('/admin/login');
     } catch (err) {
       console.error('Logout error:', err);
@@ -112,7 +112,7 @@ console.log('current user', currentUser)
       setLoading(true);
       const response = await AuthService.updateDetails(userData);
       setCurrentUser(response.data);
-      toast.success('Profile updated successfully');
+      addToast('Profile updated successfully', 'success');
       return response;
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update profile');
@@ -130,7 +130,7 @@ console.log('current user', currentUser)
     try {
       setLoading(true);
       const response = await AuthService.updatePassword(passwordData);
-      toast.success('Password updated successfully');
+      addToast('Password updated successfully', 'success');
       return response;
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update password');

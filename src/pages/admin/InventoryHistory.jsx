@@ -4,12 +4,13 @@ import { useParams, Link } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
 import { LoadingOverlay } from '../../components/ui/LoadingState';
 import InventoryService from '../../services/admin/inventory.service';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast';
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/ui/Button';
 
 const InventoryHistory = () => {
   const { id } = useParams();
+  const {addToast} = useToast();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState(null);
@@ -20,23 +21,23 @@ const InventoryHistory = () => {
       try {
         setLoading(true);
         setError(null);
-        
+
         // Fetch product details
         const productData = await InventoryService.getInventoryItem(id);
-        setProduct(productData);
-        
+        setProduct(productData || {});
+
         // Fetch history
         const historyData = await InventoryService.getInventoryHistory(id);
-        setHistory(historyData.history || []);
+        setHistory(Array.isArray(historyData.history) ? historyData.history : []);
       } catch (err) {
         console.error('Error fetching data:', err);
-        setError('Failed to load product data or stock history');
-        toast({ title: 'Error', description: 'Failed to load stock history', variant: 'destructive' });
+        setError(err.response?.data?.message || 'Failed to load product data or stock history');
+        addToast(err.response?.data?.message || 'Failed to load stock history', 'error');
       } finally {
         setLoading(false);
       }
     };
-    
+
     fetchProductAndHistory();
   }, [id]);
 
@@ -46,13 +47,15 @@ const InventoryHistory = () => {
         <Helmet>
           <title>Error | Scenture Lagos Admin</title>
         </Helmet>
-        <div className="p-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Error Loading Data</h2>
-          <p className="mb-6">{error}</p>
-          <Button as={Link} to="/admin/inventory" className="flex items-center">
-            <ArrowLeft size={16} className="mr-2" />
-            Return to Inventory
-          </Button>
+        <div className="space-y-6 px-0">
+          <div className="px-4 sm:px-6 text-center">
+            <h2 className="text-2xl sm:text-3xl font-heading font-medium text-red-600 mb-4">Error Loading Data</h2>
+            <p className="text-sm text-secondary/70 mb-6">{error}</p>
+            <Button as={Link} to="/admin/inventory" className="flex items-center w-full sm:w-auto">
+              <ArrowLeft size={16} className="mr-2" />
+              Return to Inventory
+            </Button>
+          </div>
         </div>
       </>
     );
@@ -63,62 +66,84 @@ const InventoryHistory = () => {
       <Helmet>
         <title>{product?.name ? `${product.name} Stock History` : 'Stock History'} | Scenture Lagos Admin</title>
       </Helmet>
-      <div className="mb-6">
-        <Button as={Link} to="/admin/inventory" variant="outline" className="flex items-center">
-          <ArrowLeft size={16} className="mr-2" />
-          Back to Inventory
-        </Button>
+      <div className="space-y-6 px-0">
+        <div className="px-4 sm:px-6">
+          <Button as={Link} to="/admin/inventory" variant="outline" className="flex items-center w-full sm:w-auto">
+            <ArrowLeft size={16} className="mr-2" />
+            Back to Inventory
+          </Button>
+        </div>
+        <LoadingOverlay loading={loading}>
+          <Card className="mx-0 shadow-sm">
+            <CardHeader className="px-4 sm:px-6">
+              <CardTitle>{product?.name ? product.name : 'Product'} Stock Adjustment History</CardTitle>
+              {product && (
+                <CardDescription className="text-sm text-secondary/70">
+                  SKU: {product.sku || 'N/A'} | Current Stock: {product.stockQuantity ?? 'N/A'}
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="px-4 sm:px-6">
+              {history.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {history.map((entry) => (
+                    <Card key={entry._id} className="shadow-sm hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="text-sm font-medium text-secondary">
+                              {new Date(entry.adjustedAt).toLocaleString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </div>
+                            <span
+                              className={`px-2 py-1 text-xs rounded-full ${
+                                entry.adjustment > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {entry.adjustment > 0 ? '+' : ''}{entry.adjustment}
+                            </span>
+                          </div>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-center">
+                              <span className="font-medium mr-2">Adjusted By:</span>
+                              <span className="truncate">
+                                {entry.adjustedBy?.firstName && entry.adjustedBy?.lastName
+                                  ? `${entry.adjustedBy.firstName} ${entry.adjustedBy.lastName}`
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium mr-2">Previous Stock:</span>
+                              <span>{entry.previousStock ?? 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium mr-2">New Stock:</span>
+                              <span>{entry.newStock ?? 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <span className="font-medium mr-2">Reason:</span>
+                              <span className="capitalize truncate">{entry.reason || 'N/A'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-slate-500 py-6 text-sm">
+                  No stock adjustments found
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </LoadingOverlay>
       </div>
-      <LoadingOverlay loading={loading}>
-        <Card>
-          <CardHeader>
-            <CardTitle>{product?.name ? product.name : 'Product'} Stock Adjustment History</CardTitle>
-            {product && (
-              <CardDescription>
-                SKU: {product.sku} | Current Stock: {product.stockQuantity}
-              </CardDescription>
-            )}
-          </CardHeader>
-          <CardContent>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="text-left font-medium p-3">Date</th>
-                  <th className="text-left font-medium p-3">Adjusted By</th>
-                  <th className="text-center font-medium p-3">Adjustment</th>
-                  <th className="text-center font-medium p-3">Previous Stock</th>
-                  <th className="text-center font-medium p-3">New Stock</th>
-                  <th className="text-left font-medium p-3">Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.length > 0 ? (
-                  history.map((entry) => (
-                    <tr key={entry._id} className="border-b border-slate-100">
-                      <td className="p-3">{new Date(entry.adjustedAt).toLocaleString()}</td>
-                      <td className="p-3">{entry.adjustedBy?.firstName} {entry.adjustedBy?.lastName}</td>
-                      <td className="p-3 text-center">
-                        <span className={entry.adjustment > 0 ? 'text-green-600' : 'text-red-600'}>
-                          {entry.adjustment > 0 ? '+' : ''}{entry.adjustment}
-                        </span>
-                      </td>
-                      <td className="p-3 text-center">{entry.previousStock}</td>
-                      <td className="p-3 text-center">{entry.newStock}</td>
-                      <td className="p-3 capitalize">{entry.reason}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="6" className="p-4 text-center text-slate-500">
-                      No stock adjustments found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </CardContent>
-        </Card>
-      </LoadingOverlay>
     </>
   );
 };

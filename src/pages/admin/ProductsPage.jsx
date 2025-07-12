@@ -19,11 +19,12 @@ import {
 } from 'lucide-react';
 import ProductService from '../../services/admin/product.service';
 import { LoadingOverlay } from '../../components/ui/LoadingState';
-import toast from 'react-hot-toast';
+import {useToast} from '../../components/ui/Toast';
 
 const ProductsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const {addToast} = useToast();
   
   const queryParams = new URLSearchParams(location.search);
   const initialPage = parseInt(queryParams.get('page')) || 1;
@@ -103,10 +104,10 @@ const ProductsPage = () => {
     
     try {
       await ProductService.deleteProduct(productId);
-      toast.success('Product deleted successfully');
+      addToast('Product deleted successfully', 'success');
       fetchProducts();
     } catch (err) {
-      toast.error(err.message);
+      addToast(err.message, 'error');
     } finally {
       setDeleteLoading(null);
     }
@@ -141,15 +142,14 @@ const ProductsPage = () => {
         <title>Products | Scenture Lagos Admin</title>
       </Helmet>
       
-      <div className="min-h-screen rounded-xl bg-gradient-to-br from-slate-50 via-white to-slate-50/50">
-        <div className="max-w-7xl mx-auto px-3 py-8 lg:py-12">
+        <div className="space-y-8 px-0">
           <div className="mb-8 lg:mb-12">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-6 lg:space-y-0">
               <div className="space-y-2">
-                <h1 className="text-4xl lg:text-5xl font-light text-slate-900 tracking-tight">
+                <h1 className="dashboardHeading">
                   Products
                 </h1>
-                <p className="text-lg text-slate-600 font-light">
+                <p className="dashboardSubHeading">
                   Manage your product inventory with elegance
                 </p>
               </div>
@@ -215,11 +215,11 @@ const ProductsPage = () => {
                     />
                   </div>
                   
-                  <div className="flex gap-3 lg:gap-4">
+                  <div className="flex  max-sm:flex-col gap-3 lg:gap-4">
                     <div className="relative">
                       <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
                       <select
-                        className="pl-11 pr-8 py-3 bg-white/80 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                        className="pl-11 pr-8 py-3 bg-white/80 border max-sm:w-full border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                         value={selectedCategory}
                         onChange={(e) => {
                           setSelectedCategory(e.target.value);
@@ -236,7 +236,7 @@ const ProductsPage = () => {
                     <div className="relative">
                       <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
                       <select
-                        className="pl-11 pr-8 py-3 bg-white/80 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+                        className="pl-11 pr-8 py-3 bg-white/80 border max-sm:w-full border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
                         value={selectedStatus}
                         onChange={(e) => {
                           setSelectedStatus(e.target.value);
@@ -483,8 +483,7 @@ const ProductsPage = () => {
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </div> 
     </>
   );
 };

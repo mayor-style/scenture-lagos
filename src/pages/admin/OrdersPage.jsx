@@ -14,12 +14,13 @@ import {
   Calendar,
   Download,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  ChevronDown
 } from 'lucide-react';
 import OrderService from '../../services/admin/order.service';
 import { LoadingState, LoadingOverlay } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast';
 
 // Order status options for filtering
 const ORDER_STATUS_OPTIONS = [
@@ -45,7 +46,7 @@ const OrdersPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
-  
+  const {addToast} = useToast();
   // State for orders data
   const [orders, setOrders] = useState([]);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -58,6 +59,9 @@ const OrdersPage = () => {
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState(queryParams.get('payment_status') || '');
   const [currentPage, setCurrentPage] = useState(parseInt(queryParams.get('page') || '1', 10));
   const [itemsPerPage, setItemsPerPage] = useState(parseInt(queryParams.get('limit') || '10', 10));
+  
+  // State for accordion (mobile)
+  const [openOrder, setOpenOrder] = useState(null);
   
   // State for loading and error handling
   const [loading, setLoading] = useState(true);
@@ -76,7 +80,7 @@ const OrdersPage = () => {
         limit: itemsPerPage,
         search: searchTerm || undefined,
         status: selectedStatus || undefined,
-        paymentStatus: selectedPaymentStatus || undefined // Changed to match backend
+        paymentStatus: selectedPaymentStatus || undefined
       };
       
       const searchParams = new URLSearchParams();
@@ -92,9 +96,8 @@ const OrdersPage = () => {
       }
       
       const data = await OrderService.getOrders(params);
-      if(!data.orders)
-      {
-       return toast.error('No orders found matching your criteria');
+      if (!data.orders) {
+        return addToast('No orders found matching your criteria', 'error');
       }
 
       setOrders(data.orders.map(order => ({
@@ -103,8 +106,8 @@ const OrdersPage = () => {
         customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
         email: order.user?.email || 'N/A',
         date: order.createdAt,
-        total: order.totalAmount, // Changed to match backend
-        payment_status: order.paymentInfo.status // Changed to match backend
+        total: order.totalAmount,
+        payment_status: order.paymentInfo.status
       })));
       setTotalOrders(data.total);
     } catch (err) {
@@ -112,16 +115,16 @@ const OrdersPage = () => {
       setError(err.message || 'Failed to load orders');
       setOrders([]);
       setTotalOrders(0);
-      toast.error(err.message || 'Failed to load orders');
+      addToast(err.message || 'Failed to load orders', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  // Add export functionality
+  // Export functionality
   const handleExportOrders = () => {
     if (!orders.length) {
-      toast.error('No orders to export');
+      addToast('No orders to export', 'error');
       return;
     }
     
@@ -176,20 +179,20 @@ const OrdersPage = () => {
   // Handle search form submission
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    setCurrentPage(1); // Reset to first page when searching
+    setCurrentPage(1);
     fetchOrders();
   };
   
   // Handle status filter change
   const handleStatusChange = (e) => {
     setSelectedStatus(e.target.value);
-    setCurrentPage(1); // Reset to first page when filtering
+    setCurrentPage(1);
   };
   
   // Handle payment status filter change
   const handlePaymentStatusChange = (e) => {
     setSelectedPaymentStatus(e.target.value);
-    setCurrentPage(1); // Reset to first page when filtering
+    setCurrentPage(1);
   };
   
   // Handle refresh button click
@@ -197,6 +200,11 @@ const OrdersPage = () => {
     fetchOrders();
   };
   
+  // Toggle accordion
+  const toggleOrder = (orderId) => {
+    setOpenOrder(openOrder === orderId ? null : orderId);
+  };
+
   // Fetch orders when component mounts or when filters/pagination change
   useEffect(() => {
     fetchOrders();
@@ -217,19 +225,19 @@ const OrdersPage = () => {
         <title>Orders | Scenture Lagos Admin</title>
       </Helmet>
       
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+      <div className="space-y-6 px-0">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-heading font-medium text-secondary">Orders</h1>
-            <p className="text-secondary/70 mt-1">Manage customer orders</p>
+            <h1 className="text-2xl font-bold text-gray-900">Orders</h1>
+            <p className="text-sm text-gray-500 mt-1">Manage customer orders</p>
           </div>
-          <div className="mt-4 md:mt-0 flex space-x-2">
+          <div className="flex flex-col sm:flex-row gap-3">
             <Button 
               variant="outline" 
               size="sm"
               onClick={handleRefresh}
               disabled={loading}
-              className="flex items-center"
+              className="flex items-center justify-center w-full sm:w-auto border-gray-300 hover:bg-gray-100 text-gray-700"
             >
               <RefreshCw size={16} className={`mr-2 ${loading ? 'animate-spin' : ''}`} />
               Refresh
@@ -239,10 +247,10 @@ const OrdersPage = () => {
               size="sm"
               onClick={handleExportOrders}
               disabled={loading || !orders.length}
-              className="flex items-center"
+              className="flex items-center justify-center w-full sm:w-auto border-gray-300 hover:bg-gray-100 text-gray-700"
             >
               <Download size={16} className="mr-2" />
-              Export Orders
+              Export
             </Button>
             <Button
               variant="outline"
@@ -252,16 +260,16 @@ const OrdersPage = () => {
                   clearInterval(pollingInterval);
                   setPollingInterval(null);
                   setIsPolling(false);
-                  toast.success('Real-time updates disabled');
+                  addToast('Real-time updates disabled', 'success');
                 } else {
-                  const interval = setInterval(() => fetchOrders(), 60000); // Increased to 60s
+                  const interval = setInterval(() => fetchOrders(), 60000);
                   setPollingInterval(interval);
                   setIsPolling(true);
-                  toast.success('Real-time updates enabled');
+                  addToast('Real-time updates enabled', 'success');
                 }
               }}
               disabled={loading}
-              className="flex items-center"
+              className="flex items-center justify-center w-full sm:w-auto border-gray-300 hover:bg-gray-100 text-gray-700"
             >
               {isPolling ? (
                 <>
@@ -278,29 +286,29 @@ const OrdersPage = () => {
           </div>
         </div>
 
-        <Card >
-          <CardHeader>
-            <CardTitle>Order List</CardTitle>
-            <CardDescription>View and manage all customer orders</CardDescription>
+        <Card className="border-none shadow-sm rounded-lg">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg font-semibold text-gray-900">Order List</CardTitle>
+            <CardDescription className="text-sm text-gray-500">View and manage all customer orders</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
+          <CardContent className="pb-6">
+            <div className="flex flex-col gap-4 mb-6">
               <form onSubmit={handleSearchSubmit} className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                 <input
                   type="text"
                   placeholder="Search by order ID, customer name or email..."
-                  className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all duration-200 text-sm"
                   value={searchTerm}
                   onChange={handleSearchChange}
                 />
               </form>
               
               <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                <div className="relative flex-1">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                   <select
-                    className="pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 bg-white transition-all duration-200 text-sm"
                     value={selectedStatus}
                     onChange={handleStatusChange}
                     disabled={loading}
@@ -311,10 +319,10 @@ const OrdersPage = () => {
                   </select>
                 </div>
                 
-                <div className="relative">
-                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                <div className="relative flex-1">
+                  <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                   <select
-                    className="pl-10 pr-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+                    className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 bg-white transition-all duration-200 text-sm"
                     value={selectedPaymentStatus}
                     onChange={handlePaymentStatusChange}
                     disabled={loading}
@@ -334,86 +342,182 @@ const OrdersPage = () => {
               />
             )}
             
-            <LoadingOverlay loading={loading} className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left font-medium p-3 pl-0">Order ID</th>
-                    <th className="text-left font-medium p-3">Customer</th>
-                    <th className="text-left font-medium p-3">Date</th>
-                    <th className="text-left font-medium p-3">Total</th>
-                    <th className="text-left font-medium p-3">Status</th>
-                    <th className="text-left font-medium p-3">Payment</th>
-                    <th className="text-right font-medium p-3 pr-0">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.length > 0 ? (
-                    orders.map((order) => (
-                      <tr key={order.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="p-3 pl-0 font-medium">{order.id}</td>
-                        <td className="p-3">
-                          <div>{order.customer}</div>
-                          <div className="text-xs text-slate-500">{order.email}</div>
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center">
-                            <Calendar size={14} className="mr-1 text-slate-400" />
-                            {formatDate(order.date)}
-                          </div>
-                        </td>
-                        <td className="p-3">{formatPrice(order.total)}</td>
-                        <td className="p-3">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            order.status === 'delivered' ? 'bg-green-100 text-green-800' :
-                            order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
-                            order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {order.status}
-                          </span>
-                        </td>
-                        <td className="p-3">
-                          <span className={`px-2 py-1 text-xs rounded-full ${
-                            order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
-                            order.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                            order.payment_status === 'refunded' ? 'bg-blue-100 text-blue-800' :
-                            'bg-red-100 text-red-800'
-                          }`}>
-                            {order.payment_status}
-                          </span>
-                        </td>
-                        <td className="p-3 pr-0 text-right">
-                          <Link to={`/admin/orders/${order.id}`} className="inline-flex p-2 text-slate-500 hover:text-secondary rounded-md hover:bg-slate-100">
-                            <Eye size={16} />
-                          </Link>
+            <LoadingOverlay loading={loading} className="relative">
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="text-left font-medium p-4 pl-0 text-gray-700">Order ID</th>
+                      <th className="text-left font-medium p-4 text-gray-700">Customer</th>
+                      <th className="text-left font-medium p-4 text-gray-700">Date</th>
+                      <th className="text-left font-medium p-4 text-gray-700">Total</th>
+                      <th className="text-left font-medium p-4 text-gray-700">Status</th>
+                      <th className="text-left font-medium p-4 text-gray-700">Payment</th>
+                      <th className="text-right font-medium p-4 pr-0 text-gray-700">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.length > 0 ? (
+                      orders.map((order) => (
+                        <tr key={order.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors duration-150">
+                          <td className="p-4 pl-0 font-medium text-gray-900">{order.id}</td>
+                          <td className="p-4">
+                            <div className="font-medium text-gray-900">{order.customer}</div>
+                            <div className="text-xs text-gray-500">{order.email}</div>
+                          </td>
+                          <td className="p-4">
+                            <div className="flex items-center">
+                              <Calendar size={14} className="mr-1 text-gray-400" />
+                              <span className="text-gray-900">{formatDate(order.date)}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 text-gray-900">{formatPrice(order.total)}</td>
+                          <td className="p-4">
+                            <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
+                              order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                              order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                              order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </td>
+                          <td className="p-4">
+                            <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
+                              order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                              order.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              order.payment_status === 'refunded' ? 'bg-blue-100 text-blue-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {order.payment_status}
+                            </span>
+                          </td>
+                          <td className="p-4 pr-0 text-right">
+                            <Link 
+                              to={`/admin/orders/${order.id}`} 
+                              className="inline-flex p-2 text-gray-500 hover:text-blue-600 rounded-md hover:bg-gray-100 transition-colors duration-150"
+                            >
+                              <Eye size={16} />
+                            </Link>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="p-4 text-center text-gray-500">
+                          {error ? (
+                            <div className="flex items-center justify-center">
+                              <AlertCircle size={16} className="mr-2 text-red-500" />
+                              Error loading orders
+                            </div>
+                          ) : loading ? (
+                            'Loading orders...'
+                          ) : (
+                            'No orders found matching your criteria'
+                          )}
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="7" className="p-3 text-center text-slate-500">
-                        {error ? (
-                          <div className="flex items-center justify-center">
-                            <AlertCircle size={16} className="mr-2 text-red-500" />
-                            Error loading orders
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Accordion View */}
+              <div className="md:hidden space-y-3">
+                {orders.length > 0 ? (
+                  orders.map((order) => (
+                    <div 
+                      key={order.id} 
+                      className="border border-gray-200 rounded-lg shadow-sm bg-white overflow-hidden"
+                    >
+                      <button
+                        onClick={() => toggleOrder(order.id)}
+                        className="w-full flex justify-between items-center p-4 text-left transition-colors duration-150 hover:bg-gray-50"
+                      >
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900 text-sm">{order.id}</div>
+                          <div className="text-sm text-gray-500">{order.customer}</div>
+                        </div>
+                        <ChevronDown 
+                          size={20} 
+                          className={`text-gray-400 transition-transform duration-200 ${openOrder === order.id ? 'rotate-180' : ''}`} 
+                        />
+                      </button>
+                      {openOrder === order.id && (
+                        <div className="p-4 pt-0 bg-gray-50 space-y-3">
+                          <div>
+                            <div className="text-xs text-gray-500 font-medium">Email</div>
+                            <div className="text-sm text-gray-900">{order.email}</div>
                           </div>
-                        ) : loading ? (
-                          'Loading orders...'
-                        ) : (
-                          'No orders found matching your criteria'
-                        )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                          <div>
+                            <div className="text-xs text-gray-500 font-medium">Date</div>
+                            <div className="flex items-center text-sm text-gray-900">
+                              <Calendar size={14} className="mr-1 text-gray-400" />
+                              {formatDate(order.date)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 font-medium">Total</div>
+                            <div className="text-sm text-gray-900 font-medium">{formatPrice(order.total)}</div>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 font-medium">Status</div>
+                            <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
+                              order.status === 'delivered' ? 'bg-green-100 text-green-800' :
+                              order.status === 'processing' ? 'bg-blue-100 text-blue-800' :
+                              order.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              order.status === 'shipped' ? 'bg-purple-100 text-purple-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {order.status}
+                            </span>
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500 font-medium">Payment</div>
+                            <span className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${
+                              order.payment_status === 'paid' ? 'bg-green-100 text-green-800' :
+                              order.payment_status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                              order.payment_status === 'refunded' ? 'bg-blue-100 text-blue-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {order.payment_status}
+                            </span>
+                          </div>
+                          <div className="pt-2">
+                            <Link 
+                              to={`/admin/orders/${order.id}`} 
+                              className="inline-flex items-center px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-md transition-colors duration-150"
+                            >
+                              <Eye size={16} className="mr-2" />
+                              View Details
+                            </Link>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-4 text-center text-gray-500 bg-white border border-gray-200 rounded-lg">
+                    {error ? (
+                      <div className="flex items-center justify-center">
+                        <AlertCircle size={16} className="mr-2 text-red-500" />
+                        Error loading orders
+                      </div>
+                    ) : loading ? (
+                      'Loading orders...'
+                    ) : (
+                      'No orders found matching your criteria'
+                    )}
+                  </div>
+                )}
+              </div>
             </LoadingOverlay>
 
             {totalOrders > 0 && (
-              <div className="flex items-center justify-between mt-6">
-                <div className="text-sm text-slate-500">
+              <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4">
+                <div className="text-sm text-gray-500">
                   Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalOrders)} of {totalOrders} orders
                 </div>
                 <div className="flex items-center space-x-2">
@@ -422,6 +526,7 @@ const OrdersPage = () => {
                     size="sm"
                     onClick={() => handlePageChange(currentPage - 1)}
                     disabled={currentPage === 1 || loading}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
                   >
                     <ChevronLeft size={16} />
                   </Button>
@@ -433,6 +538,7 @@ const OrdersPage = () => {
                         size="sm"
                         onClick={() => handlePageChange(page)}
                         disabled={loading}
+                        className={currentPage === page ? 'bg-blue-600 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}
                       >
                         {page}
                       </Button>
@@ -444,11 +550,12 @@ const OrdersPage = () => {
                         size="sm"
                         onClick={() => handlePageChange(1)}
                         disabled={loading}
+                        className={currentPage === 1 ? 'bg-blue-600 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}
                       >
                         1
                       </Button>
                       {currentPage > 3 && (
-                        <span className="px-2">...</span>
+                        <span className="px-2 text-gray-500">...</span>
                       )}
                       {Array.from(
                         { length: Math.min(3, totalPages) },
@@ -469,6 +576,7 @@ const OrdersPage = () => {
                                 size="sm"
                                 onClick={() => handlePageChange(pageNum)}
                                 disabled={loading}
+                                className={currentPage === pageNum ? 'bg-blue-600 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}
                               >
                                 {pageNum}
                               </Button>
@@ -478,13 +586,14 @@ const OrdersPage = () => {
                         }
                       ).filter(Boolean)}
                       {currentPage < totalPages - 2 && (
-                        <span className="px-2">...</span>
+                        <span className="px-2 text-gray-500">...</span>
                       )}
                       <Button
                         variant={currentPage === totalPages ? 'default' : 'outline'}
                         size="sm"
                         onClick={() => handlePageChange(totalPages)}
                         disabled={loading}
+                        className={currentPage === totalPages ? 'bg-blue-600 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}
                       >
                         {totalPages}
                       </Button>
@@ -495,6 +604,7 @@ const OrdersPage = () => {
                     size="sm"
                     onClick={() => handlePageChange(currentPage + 1)}
                     disabled={currentPage === totalPages || loading}
+                    className="border-gray-300 text-gray-700 hover:bg-gray-100"
                   >
                     <ChevronRight size={16} />
                   </Button>

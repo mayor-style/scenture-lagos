@@ -52,7 +52,7 @@ const ProductCard = ({ product }) => {
             to={`/product/${product.id}`}
             className="block group/link focus:outline-none focus:ring-2 focus:ring-neutral-300 rounded"
           >
-            <h3 className="font-heading font-serif text-xl lg:text-2xl text-neutral-900 group-hover/link:text-neutral-700 transition-colors duration-200 leading-tight tracking-tight">
+            <h3 className="font-heading text-xl lg:text-2xl text-neutral-900 group-hover/link:text-neutral-700 transition-colors duration-200 leading-tight tracking-tight">
               {product.name}
             </h3>
           </Link>

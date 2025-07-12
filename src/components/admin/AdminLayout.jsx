@@ -6,11 +6,11 @@ import { Toaster } from 'react-hot-toast';
 import { Outlet } from 'react-router-dom';
 
 const AdminLayout = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 1200);
 
   useEffect(() => {
     const handleResize = () => {
-      setSidebarOpen(window.innerWidth >= 768);
+      setSidebarOpen(window.innerWidth >= 1200);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -28,8 +28,8 @@ const AdminLayout = () => {
       <div
         className={cn(
           'flex flex-col flex-1 overflow-hidden',
-          'md:ml-[64px]', // Reserve space for collapsed sidebar (w-20)
-          sidebarOpen && 'md:ml-[256px]' // Reserve space for open sidebar (w-64)
+          'lg:ml-[64px]', // Reserve space for collapsed sidebar (w-20)
+          sidebarOpen && 'lg:ml-[256px]' // Reserve space for open sidebar (w-64)
         )}
       >
         <AdminHeader sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />

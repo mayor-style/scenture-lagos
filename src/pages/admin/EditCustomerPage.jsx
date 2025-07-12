@@ -6,11 +6,12 @@ import { Button } from '../../components/ui/Button';
 import { ArrowLeft, Edit, AlertCircle } from 'lucide-react';
 import CustomerService from '../../services/admin/customer.service';
 import { LoadingState } from '../../components/ui/LoadingState';
-import toast from 'react-hot-toast';
+import {useToast} from '../../components/ui/Toast';
 
 const EditCustomerPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const {addToast} = useToast();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -31,9 +32,10 @@ const EditCustomerPage = () => {
 
   const fetchCustomer = async () => {
     setLoading(true);
+    setErrors({});
     try {
       const response = await CustomerService.getCustomer(id);
-      const customer = response.data.customer;
+      const customer = response.data?.customer || {};
       setFormData({
         firstName: customer.firstName || '',
         lastName: customer.lastName || '',
@@ -51,8 +53,9 @@ const EditCustomerPage = () => {
       });
       setLoading(false);
     } catch (err) {
-      setErrors({ form: err.response?.data?.message || 'Failed to load customer data' });
-      toast.error(err.response?.data?.message || 'Failed to load customer data');
+      const errorMessage = err.response?.data?.message || 'Failed to load customer data';
+      setErrors({ form: errorMessage });
+      addToast(errorMessage, 'error');
       setLoading(false);
     }
   };
@@ -84,10 +87,11 @@ const EditCustomerPage = () => {
         ...formData,
         address: { ...formData.address, [addressField]: value },
       });
+      setErrors({ ...errors, [`address.${addressField}`]: '' });
     } else {
       setFormData({ ...formData, [name]: value });
+      setErrors({ ...errors, [name]: '' });
     }
-    setErrors({ ...errors, [name]: '' });
   };
 
   const handleSubmit = async (e) => {
@@ -95,7 +99,7 @@ const EditCustomerPage = () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      toast.error('Please fix the errors in the form');
+      addToast('Please fix the errors in the form', 'error');
       return;
     }
 
@@ -113,18 +117,18 @@ const EditCustomerPage = () => {
         updateData.password = formData.password;
       }
       await CustomerService.updateCustomer(id, updateData);
-      toast.success('Customer updated successfully');
+      addToast('Customer updated successfully', 'success');
       navigate(`/admin/customers/${id}`);
     } catch (err) {
-      setLoading(false);
       const errorMessage = err.response?.data?.message || 'Failed to update customer';
       setErrors({ form: errorMessage });
-      toast.error(errorMessage);
+      addToast(errorMessage, 'error');
+      setLoading(false);
     }
   };
 
   if (loading) {
-    return <LoadingState fullPage={false} className="py-12" />;
+    return <LoadingState fullPage={false} className="py-12 px-4 sm:px-6" />;
   }
 
   return (
@@ -133,25 +137,25 @@ const EditCustomerPage = () => {
         <title>Edit Customer | Scenture Lagos Admin</title>
       </Helmet>
 
-      <div className="space-y-6">
-        <div className="flex items-center">
+      <div className="space-y-6 px-0">
+        <div className="flex items-center px-4 sm:px-6">
           <Link to={`/admin/customers/${id}`} className="mr-4">
             <Button variant="ghost" size="icon">
               <ArrowLeft size={20} />
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-heading font-medium text-secondary">Edit Customer</h1>
-            <p className="text-secondary/70 mt-1">Update customer profile details</p>
+            <h1 className="text-2xl sm:text-3xl font-heading font-medium text-secondary">Edit Customer</h1>
+            <p className="text-sm text-secondary/70 mt-1">Update customer profile details</p>
           </div>
         </div>
 
-        <Card>
-          <CardHeader>
+        <Card className="mx-0 shadow-sm">
+          <CardHeader className="px-4 sm:px-6">
             <CardTitle>Customer Details</CardTitle>
             <CardDescription>Update the customer’s information below</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             {errors.form && (
               <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-md flex items-center">
                 <AlertCircle size={16} className="mr-2" />
@@ -159,7 +163,7 @@ const EditCustomerPage = () => {
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-secondary">First Name</label>
                   <input
@@ -169,7 +173,7 @@ const EditCustomerPage = () => {
                     onChange={handleInputChange}
                     className={`mt-1 w-full px-4 py-2 border ${
                       errors.firstName ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
+                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm`}
                     placeholder="Enter first name"
                   />
                   {errors.firstName && (
@@ -185,7 +189,7 @@ const EditCustomerPage = () => {
                     onChange={handleInputChange}
                     className={`mt-1 w-full px-4 py-2 border ${
                       errors.lastName ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
+                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm`}
                     placeholder="Enter last name"
                   />
                   {errors.lastName && (
@@ -201,7 +205,7 @@ const EditCustomerPage = () => {
                     onChange={handleInputChange}
                     className={`mt-1 w-full px-4 py-2 border ${
                       errors.email ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
+                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm`}
                     placeholder="Enter email"
                   />
                   {errors.email && (
@@ -215,7 +219,7 @@ const EditCustomerPage = () => {
                     name="phone"
                     value={formData.phone}
                     onChange={handleInputChange}
-                    className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                     placeholder="Enter phone number (optional)"
                   />
                 </div>
@@ -228,7 +232,7 @@ const EditCustomerPage = () => {
                     onChange={handleInputChange}
                     className={`mt-1 w-full px-4 py-2 border ${
                       errors.password ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
+                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm`}
                     placeholder="Enter new password (leave blank to keep current)"
                   />
                   {errors.password && (
@@ -241,7 +245,7 @@ const EditCustomerPage = () => {
                     name="active"
                     value={formData.active}
                     onChange={(e) => setFormData({ ...formData, active: e.target.value === 'true' })}
-                    className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                   >
                     <option value={true}>Active</option>
                     <option value={false}>Inactive</option>
@@ -250,7 +254,7 @@ const EditCustomerPage = () => {
               </div>
               <div>
                 <h3 className="text-lg font-medium text-secondary mb-2">Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-secondary">Street</label>
                     <input
@@ -258,7 +262,7 @@ const EditCustomerPage = () => {
                       name="address.street"
                       value={formData.address.street}
                       onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                       placeholder="Enter street (optional)"
                     />
                   </div>
@@ -269,7 +273,7 @@ const EditCustomerPage = () => {
                       name="address.city"
                       value={formData.address.city}
                       onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                       placeholder="Enter city (optional)"
                     />
                   </div>
@@ -280,7 +284,7 @@ const EditCustomerPage = () => {
                       name="address.state"
                       value={formData.address.state}
                       onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                       placeholder="Enter state (optional)"
                     />
                   </div>
@@ -291,7 +295,7 @@ const EditCustomerPage = () => {
                       name="address.postalCode"
                       value={formData.address.postalCode}
                       onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                       placeholder="Enter postal code (optional)"
                     />
                   </div>
@@ -302,17 +306,19 @@ const EditCustomerPage = () => {
                       name="address.country"
                       value={formData.address.country}
                       onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                       placeholder="Enter country"
                     />
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-col sm:flex-row justify-end space-x-0 sm:space-x-3 gap-3">
                 <Link to={`/admin/customers/${id}`}>
-                  <Button variant="outline">Cancel</Button>
+                  <Button variant="outline" className="w-full sm:w-auto">
+                    Cancel
+                  </Button>
                 </Link>
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                   <Edit size={16} className="mr-2" />
                   Update Customer
                 </Button>

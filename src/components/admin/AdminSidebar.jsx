@@ -32,7 +32,7 @@ const AdminSidebar = ({ open, setOpen }) => {
         animate={{ width: open ? 256 : 64 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         className={cn(
-          'hidden md:flex flex-col h-screen bg-white border-r border-slate-200/80 shadow-sm fixed left-0 top-0 z-40'
+          'hidden lg:flex flex-col h-screen bg-white border-r border-slate-200/80 shadow-sm fixed left-0 top-0 z-40'
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200/80">
@@ -96,7 +96,7 @@ const AdminSidebar = ({ open, setOpen }) => {
         animate={{ x: open ? 0 : '-100%' }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         className={cn(
-          'md:hidden fixed top-0 left-0 z-50 h-screen w-64 bg-white border-r border-slate-200/80 shadow-sm flex flex-col'
+          'lg:hidden fixed top-0 left-0 z-50 h-screen w-64 bg-white border-r border-slate-200/80 shadow-sm flex flex-col'
         )}
       >
         <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200/80">
@@ -150,7 +150,7 @@ const AdminSidebar = ({ open, setOpen }) => {
           animate={{ opacity: 0.5 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.3 }}
-          className="md:hidden fixed inset-0 bg-black z-40"
+          className="lg:hidden fixed inset-0 bg-black z-40"
           onClick={() => setOpen(false)}
         />
       )}

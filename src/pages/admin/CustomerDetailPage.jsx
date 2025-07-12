@@ -24,15 +24,16 @@ import {
 import CustomerService from '../../services/admin/customer.service';
 import { LoadingOverlay, LoadingState } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
-import toast from 'react-hot-toast';
+import {useToast} from '../../components/ui/Toast';
 
 const CustomerDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const {addToast} = useToast();
   const [customer, setCustomer] = useState(null);
   const [orders, setOrders] = useState([]);
   const [reviews, setReviews] = useState([]);
-  const [notes, setNotes] = useState([]); // Initialize as empty array
+  const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [note, setNote] = useState('');
@@ -64,7 +65,7 @@ const CustomerDetailPage = () => {
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load customer data');
       setLoading(false);
-      toast.error(err.response?.data?.message || 'Failed to load customer data');
+      addToast(err.response?.data?.message || 'Failed to load customer data', 'error');
     }
   };
 
@@ -72,53 +73,48 @@ const CustomerDetailPage = () => {
     fetchCustomerData();
   }, [id, orderPage, reviewPage]);
 
- const handleAddNote = async () => {
-  if (!note.trim()) {
-    toast.error('Please enter a note');
-    return;
-  }
-  try {
-    // Optimistically update the notes state
-    const newNote = {
-      id: Date.now(), // Temporary ID until the API returns the real one
-      content: note,
-      author: 'Current User', // Replace with actual user data if available
-      date: new Date().toISOString(), // Temporary date
-    };
-    setNotes((prevNotes) => [...prevNotes, newNote]); // Add new note optimistically
-    setNote(''); // Clear the input field
-
-    const response = await CustomerService.addCustomerNote(id, { content: note });
-
-    // Update notes with the actual response from the API
-    if (response.data.notes) {
-      setNotes(Array.isArray(response.data.notes) ? response.data.notes : []);
-    } else if (response.data.note) {
-      // If API returns just the new note, append it
-      setNotes((prevNotes) =>
-        prevNotes.map((n) => (n.id === newNote.id ? response.data.note : n))
-      );
-    } else {
-      // Fallback: refetch all notes if the response doesn't include notes
-      const notesResponse = await CustomerService.getCustomerNotes(id);
-      setNotes(Array.isArray(notesResponse.data.notes) ? notesResponse.data.notes : []);
+  const handleAddNote = async () => {
+    if (!note.trim()) {
+      addToast('Please enter a note', 'error');
+      return;
     }
+    try {
+      const newNote = {
+        id: Date.now(),
+        content: note,
+        author: 'Current User',
+        date: new Date().toISOString(),
+      };
+      setNotes((prevNotes) => [...prevNotes, newNote]);
+      setNote('');
 
-    toast.success('Note added successfully');
-  } catch (err) {
-    // Roll back optimistic update on error
-    setNotes((prevNotes) => prevNotes.filter((n) => n.id !== Date.now()));
-    toast.error(err.response?.data?.error || 'Failed to add note');
-  }
-};
+      const response = await CustomerService.addCustomerNote(id, { content: note });
+
+      if (response.data.notes) {
+        setNotes(Array.isArray(response.data.notes) ? response.data.notes : []);
+      } else if (response.data.note) {
+        setNotes((prevNotes) =>
+          prevNotes.map((n) => (n.id === newNote.id ? response.data.note : n))
+        );
+      } else {
+        const notesResponse = await CustomerService.getCustomerNotes(id);
+        setNotes(Array.isArray(notesResponse.data.notes) ? notesResponse.data.notes : []);
+      }
+
+      addToast('Note added successfully', 'success');
+    } catch (err) {
+      setNotes((prevNotes) => prevNotes.filter((n) => n.id !== Date.now()));
+      addToast(err.response?.data?.error || 'Failed to add note', 'error');
+    }
+  };
 
   const handleDeleteNote = async (noteId) => {
     try {
       await CustomerService.deleteCustomerNote(id, noteId);
       setNotes(notes.filter((n) => n.id !== noteId));
-      toast.success('Note deleted successfully');
+      addToast('Note deleted successfully','success');
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete note');
+      addToast(err.response?.data?.message || 'Failed to delete note', 'error');
     }
   };
 
@@ -133,9 +129,9 @@ const CustomerDetailPage = () => {
         response = await CustomerService.deactivateCustomer(id);
       }
       setCustomer(response.data.customer);
-      toast.success(`Customer ${action} action completed successfully`);
+      addToast(`Customer ${action} action completed successfully`, 'success');
     } catch (err) {
-      toast.error(err.response?.data?.message || `Failed to ${action} customer`);
+      addToast(err.response?.data?.message || `Failed to ${action} customer`, 'error');
     }
   };
 
@@ -148,7 +144,7 @@ const CustomerDetailPage = () => {
   };
 
   if (loading) {
-    return <LoadingState fullPage={false} className="py-12" />;
+    return <LoadingState fullPage={false} className="py-12 px-4 sm:px-6" />;
   }
 
   if (error || !customer) {
@@ -157,7 +153,7 @@ const CustomerDetailPage = () => {
         title="Failed to load customer"
         message={error || 'Customer not found'}
         onRetry={fetchCustomerData}
-        className="py-12"
+        className="py-12 px-4 sm:px-6"
       />
     );
   }
@@ -168,8 +164,8 @@ const CustomerDetailPage = () => {
         <title>{customer.name} | Scenture Lagos Admin</title>
       </Helmet>
 
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between">
+      <div className="space-y-6 px-0">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-4 sm:px-6">
           <div className="flex items-center">
             <Link to="/admin/customers" className="mr-4">
               <Button variant="ghost" size="icon">
@@ -177,13 +173,15 @@ const CustomerDetailPage = () => {
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-heading font-medium text-secondary">{customer.name}</h1>
-              <div className="flex items-center mt-1 text-secondary/70">
+              <h1 className="text-2xl sm:text-3xl font-heading font-medium text-secondary">{customer.name}</h1>
+              <div className="flex flex-col sm:flex-row sm:items-center mt-1 text-secondary/70 text-sm gap-2">
                 <span>{customer.id}</span>
-                <span className="mx-2">•</span>
-                <Calendar size={14} className="mr-1" />
-                <span>Customer since {customer.created_at}</span>
-                <span className="mx-2">•</span>
+                <span className="hidden sm:inline mx-2">•</span>
+                <div className="flex items-center">
+                  <Calendar size={14} className="mr-1" />
+                  <span>Customer since {customer.created_at}</span>
+                </div>
+                <span className="hidden sm:inline mx-2">•</span>
                 <span
                   className={`px-2 py-0.5 text-xs rounded-full ${
                     customer.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'
@@ -204,96 +202,73 @@ const CustomerDetailPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 px-4 sm:px-6">
+          <div className="lg:col-span-2 space-y-4">
             <Card>
               <div className="border-b border-slate-200">
                 <div className="flex overflow-x-auto">
-                  <button
-                    onClick={() => setActiveTab('orders')}
-                    className={`px-4 py-3 font-medium text-sm whitespace-nowrap ${
-                      activeTab === 'orders' ? 'border-b-2 border-primary text-primary' : 'text-slate-600'
-                    }`}
-                  >
-                    Orders ({totalOrders || 0})
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('reviews')}
-                    className={`px-4 py-3 font-medium text-sm whitespace-nowrap ${
-                      activeTab === 'reviews' ? 'border-b-2 border-primary text-primary' : 'text-slate-600'
-                    }`}
-                  >
-                    Reviews ({totalReviews || 0})
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('notes')}
-                    className={`px-4 py-3 font-medium text-sm whitespace-nowrap ${
-                      activeTab === 'notes' ? 'border-b-2 border-primary text-primary' : 'text-slate-600'
-                    }`}
-                  >
-                    Notes ({notes.length || 0})
-                  </button>
+                  {['orders', 'reviews', 'notes'].map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-4 py-3 font-medium text-sm whitespace-nowrap flex-1 sm:flex-none ${
+                        activeTab === tab ? 'border-b-2 border-primary text-primary' : 'text-slate-600'
+                      }`}
+                    >
+                      {tab.charAt(0).toUpperCase() + tab.slice(1)} (
+                      {tab === 'orders' ? totalOrders : tab === 'reviews' ? totalReviews : notes.length || 0})
+                    </button>
+                  ))}
                 </div>
               </div>
-              <CardContent className="p-0">
+              <CardContent className="p-4 sm:p-6">
                 <LoadingOverlay loading={loading}>
                   {activeTab === 'orders' && (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-slate-200">
-                            <th className="text-left font-medium p-4 pl-6">Order ID</th>
-                            <th className="text-left font-medium p-4">Date</th>
-                            <th className="text-left font-medium p-4">Status</th>
-                            <th className="text-left font-medium p-4">Items</th>
-                            <th className="text-right font-medium p-4">Total</th>
-                            <th className="text-right font-medium p-4 pr-6">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {orders.map((order) => (
-                            <tr key={order.id} className="border-b border-slate-100">
-                              <td className="p-4 pl-6 font-medium">{order.id}</td>
-                              <td className="p-4">{order.date}</td>
-                              <td className="p-4">
-                                <span
-                                  className={`px-2 py-1 text-xs rounded-full ${
-                                    order.status === 'delivered'
-                                      ? 'bg-green-100 text-green-800'
-                                      : order.status === 'processing'
-                                      ? 'bg-blue-100 text-blue-800'
-                                      : order.status === 'pending'
-                                      ? 'bg-yellow-100 text-yellow-800'
-                                      : order.status === 'shipped'
-                                      ? 'bg-purple-100 text-purple-800'
-                                      : 'bg-red-100 text-red-800'
-                                  }`}
-                                >
-                                  {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                                </span>
-                              </td>
-                              <td className="p-4">{order.items} item{order.items !== 1 ? 's' : ''}</td>
-                              <td className="p-4 text-right font-medium">{formatPrice(order.total)}</td>
-                              <td className="p-4 pr-6 text-right">
+                    <div className="space-y-4">
+                      {orders.length > 0 ? (
+                        orders.map((order) => (
+                          <Card key={order.id} className="shadow-sm">
+                            <CardContent className="p-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="font-medium">{order.id}</div>
+                                  <div className="text-sm text-slate-500">{order.date}</div>
+                                </div>
+                                <div className="flex-1">
+                                  <span
+                                    className={`px-2 py-1 text-xs rounded-full ${
+                                      order.status === 'delivered'
+                                        ? 'bg-green-100 text-green-800'
+                                        : order.status === 'processing'
+                                        ? 'bg-blue-100 text-blue-800'
+                                        : order.status === 'pending'
+                                        ? 'bg-yellow-100 text-yellow-800'
+                                        : order.status === 'shipped'
+                                        ? 'bg-purple-100 text-purple-800'
+                                        : 'bg-red-100 text-red-800'
+                                    }`}
+                                  >
+                                    {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                                  </span>
+                                </div>
+                                <div className="flex-1 text-sm">
+                                  {order.items} item{order.items !== 1 ? 's' : ''}
+                                </div>
+                                <div className="flex-1 text-right font-medium">{formatPrice(order.total)}</div>
                                 <Link to={`/admin/orders/${order.id}`}>
                                   <Button variant="outline" size="sm">
                                     View
                                   </Button>
                                 </Link>
-                              </td>
-                            </tr>
-                          ))}
-                          {orders.length === 0 && (
-                            <tr>
-                              <td colSpan="6" className="p-4 text-center text-slate-500">
-                                No orders found
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))
+                      ) : (
+                        <div className="text-center text-slate-500 p-4">No orders found</div>
+                      )}
                       {totalOrders > itemsPerPage && (
-                        <div className="flex items-center justify-between mt-6 px-6">
+                        <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4">
                           <div className="text-sm text-slate-500">
                             Showing {(orderPage - 1) * itemsPerPage + 1} to{' '}
                             {Math.min(orderPage * itemsPerPage, totalOrders)} of {totalOrders} orders
@@ -335,43 +310,45 @@ const CustomerDetailPage = () => {
                   )}
 
                   {activeTab === 'reviews' && (
-                    <div className="divide-y divide-slate-100">
+                    <div className="space-y-4">
                       {reviews.length > 0 ? (
                         reviews.map((review) => (
-                          <div key={review.id} className="p-6">
-                            <div className="flex items-center justify-between mb-2">
-                              <div>
-                                <Link
-                                  to={`/admin/products/${review.product_id}`}
-                                  className="font-medium text-secondary hover:text-primary"
-                                >
-                                  {review.product_name}
-                                </Link>
-                                <div className="flex items-center mt-1">
-                                  {[...Array(5)].map((_, i) => (
-                                    <Star
-                                      key={i}
-                                      size={16}
-                                      className={i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}
-                                    />
-                                  ))}
-                                  <span className="ml-2 text-sm text-slate-500">{review.date}</span>
+                          <Card key={review.id} className="shadow-sm">
+                            <CardContent className="p-4">
+                              <div className="flex flex-col sm:flex-row justify-between gap-4">
+                                <div>
+                                  <Link
+                                    to={`/admin/products/${review.product_id}`}
+                                    className="font-medium text-secondary hover:text-primary"
+                                  >
+                                    {review.product_name}
+                                  </Link>
+                                  <div className="flex items-center mt-1">
+                                    {[...Array(5)].map((_, i) => (
+                                      <Star
+                                        key={i}
+                                        size={16}
+                                        className={i < review.rating ? 'text-yellow-400 fill-yellow-400' : 'text-slate-200'}
+                                      />
+                                    ))}
+                                    <span className="ml-2 text-sm text-slate-500">{review.date}</span>
+                                  </div>
+                                  <p className="text-sm text-slate-600 mt-2">{review.content}</p>
                                 </div>
+                                <Link to={`/admin/products/${review.product_id}/reviews`}>
+                                  <Button variant="outline" size="sm">
+                                    View Product
+                                  </Button>
+                                </Link>
                               </div>
-                              <Link to={`/admin/products/${review.product_id}/reviews`}>
-                                <Button variant="outline" size="sm">
-                                  View Product
-                                </Button>
-                              </Link>
-                            </div>
-                            <p className="text-slate-600">{review.content}</p>
-                          </div>
+                            </CardContent>
+                          </Card>
                         ))
                       ) : (
-                        <div className="p-6 text-center text-slate-500">No reviews yet</div>
+                        <div className="text-center text-slate-500 p-4">No reviews yet</div>
                       )}
                       {totalReviews > itemsPerPage && (
-                        <div className="flex items-center justify-between mt-6 px-6">
+                        <div className="flex flex-col sm:flex-row items-center justify-between mt-6 gap-4">
                           <div className="text-sm text-slate-500">
                             Showing {(reviewPage - 1) * itemsPerPage + 1} to{' '}
                             {Math.min(reviewPage * itemsPerPage, totalReviews)} of {totalReviews} reviews
@@ -413,7 +390,7 @@ const CustomerDetailPage = () => {
                   )}
 
                   {activeTab === 'notes' && (
-                    <div className="p-6 space-y-6">
+                    <div className="space-y-4">
                       <div className="space-y-3">
                         <textarea
                           value={note}
@@ -426,31 +403,32 @@ const CustomerDetailPage = () => {
                           Add Note
                         </Button>
                       </div>
-
                       <div className="space-y-4">
                         {Array.isArray(notes) && notes.length > 0 ? (
                           notes.map((noteItem) => (
-                            <div key={noteItem.id} className="bg-slate-50 p-4 rounded-md">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="font-medium text-secondary">{noteItem.author}</span>
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-xs text-slate-500">{noteItem.date}</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-red-600 hover:text-red-800"
-                                    onClick={() => handleDeleteNote(noteItem.id)}
-                                    disabled={loading}
-                                  >
-                                    Delete
-                                  </Button>
+                            <Card key={noteItem.id} className="shadow-sm">
+                              <CardContent className="p-4">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="font-medium text-secondary">{noteItem.author}</span>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="text-xs text-slate-500">{noteItem.date}</span>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-red-600 hover:text-red-800"
+                                      onClick={() => handleDeleteNote(noteItem.id)}
+                                      disabled={loading}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
                                 </div>
-                              </div>
-                              <p className="text-sm text-slate-600">{noteItem.content}</p>
-                            </div>
+                                <p className="text-sm text-slate-600">{noteItem.content}</p>
+                              </CardContent>
+                            </Card>
                           ))
                         ) : (
-                          <p className="text-slate-500 text-center py-4">No notes added yet</p>
+                          <p className="text-slate-500 text-center p-4">No notes added yet</p>
                         )}
                       </div>
                     </div>
@@ -460,13 +438,13 @@ const CustomerDetailPage = () => {
             </Card>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             <Card>
-              <CardHeader>
+              <CardHeader className="px-4 sm:px-6">
                 <CardTitle>Customer Information</CardTitle>
                 <CardDescription>Contact details and address</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 sm:px-6">
                 <div className="space-y-4">
                   <div className="flex items-start">
                     <User size={16} className="mr-2 mt-0.5 text-slate-400" />
@@ -477,7 +455,7 @@ const CustomerDetailPage = () => {
                   </div>
                   <div className="flex items-start">
                     <Mail size={16} className="mr-2 mt-0.5 text-slate-400" />
-                    <div className="text-sm">{customer.email}</div>
+                    <div className="text-sm truncate">{customer.email}</div>
                   </div>
                   <div className="flex items-start">
                     <Phone size={16} className="mr-2 mt-0.5 text-slate-400" />
@@ -501,11 +479,11 @@ const CustomerDetailPage = () => {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="px-4 sm:px-6">
                 <CardTitle>Customer Stats</CardTitle>
                 <CardDescription>Overview of customer activity</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4 sm:px-6">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
@@ -526,7 +504,7 @@ const CustomerDetailPage = () => {
                       <Star size={16} className="mr-2 text-slate-400" />
                       <span>Reviews</span>
                     </div>
-                    <span className="font-medium">{totalReviews || "Null"}</span>
+                    <span className="font-medium">{totalReviews || '0'}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
@@ -536,7 +514,7 @@ const CustomerDetailPage = () => {
                     <span className="font-medium">{customer.created_at}</span>
                   </div>
                   <div className="pt-2 border-t border-slate-200">
-                    <div className="flexLos items-center justify-between font-medium text-lg">
+                    <div className="flex items-center justify-between font-medium text-lg">
                       <span>Total Spent</span>
                       <span className="text-primary">{formatPrice(customer.total_spent)}</span>
                     </div>
@@ -546,11 +524,11 @@ const CustomerDetailPage = () => {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="px-4 sm:px-6">
                 <CardTitle>Customer Actions</CardTitle>
                 <CardDescription>Manage customer status and flags</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="px-4 sm:px-6 space-y-3">
                 <Button
                   variant="outline"
                   className="w-full justify-start"

@@ -6,10 +6,11 @@ import { Button } from '../../components/ui/Button';
 import { ArrowLeft, UserPlus, AlertCircle } from 'lucide-react';
 import CustomerService from '../../services/admin/customer.service';
 import { LoadingState } from '../../components/ui/LoadingState';
-import toast from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast'; // Replaced react-hot-toast with custom toast
 
 const AddCustomerPage = () => {
   const navigate = useNavigate();
+  const { addToast } = useToast(); // Use custom toast hook
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -63,21 +64,20 @@ const AddCustomerPage = () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      toast.error('Please fix the errors in the form');
+      addToast('Please fix the errors in the form', 'error'); // Updated to use custom toast
       return;
     }
 
     setLoading(true);
     try {
       await CustomerService.createCustomer(formData);
-      toast.success('Customer created successfully');
+      addToast('Customer created successfully', 'success'); // Updated to use custom toast
       navigate('/admin/customers');
     } catch (err) {
-      console.log('from page', err)
       setLoading(false);
       const errorMessage = err.toString() || 'Failed to create customer';
       setErrors({ form: errorMessage });
-      toast.error(errorMessage);
+      addToast(errorMessage, 'error'); // Updated to use custom toast
     }
   };
 
@@ -87,27 +87,27 @@ const AddCustomerPage = () => {
         <title>Add Customer | Scenture Lagos Admin</title>
       </Helmet>
 
-      <div className="space-y-6">
-        <div className="flex items-center">
+      <div className="space-y-6 px-0">
+        <div className="flex items-center px-4 sm:px-6">
           <Link to="/admin/customers" className="mr-4">
             <Button variant="ghost" size="icon">
               <ArrowLeft size={20} />
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-heading font-medium text-secondary">Add New Customer</h1>
-            <p className="text-secondary/70 mt-1">Create a new customer profile</p>
+            <h1 className="dashboardHeading">Add New Customer</h1>
+            <p className="dashboardSubHeading">Create a new customer profile</p>
           </div>
         </div>
 
-        {loading && <LoadingState fullPage={false} className="py-12" />}
+        {loading && <LoadingState fullPage={false} className="py-12 px-4 sm:px-6" />}
 
-        <Card>
-          <CardHeader>
+        <Card className="mx-0">
+          <CardHeader className="px-4 sm:px-6">
             <CardTitle>Customer Details</CardTitle>
             <CardDescription>Enter the customer’s information below</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 sm:px-6">
             {errors.form && (
               <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-md flex items-center">
                 <AlertCircle size={16} className="mr-2" />
@@ -115,7 +115,7 @@ const AddCustomerPage = () => {
               </div>
             )}
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-secondary">First Name</label>
                   <input
@@ -194,7 +194,7 @@ const AddCustomerPage = () => {
               </div>
               <div>
                 <h3 className="text-lg font-medium text-secondary mb-2">Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-secondary">Street</label>
                     <input
@@ -252,11 +252,13 @@ const AddCustomerPage = () => {
                   </div>
                 </div>
               </div>
-              <div className="flex justify-end space-x-3">
+              <div className="flex flex-col sm:flex-row justify-end space-x-0 sm:space-x-3 gap-3">
                 <Link to="/admin/customers">
-                  <Button variant="outline">Cancel</Button>
+                  <Button variant="outline" className="w-full sm:w-auto">
+                    Cancel
+                  </Button>
                 </Link>
-                <Button type="submit" disabled={loading}>
+                <Button type="submit" disabled={loading} className="w-full sm:w-auto">
                   <UserPlus size={16} className="mr-2" />
                   Create Customer
                 </Button>

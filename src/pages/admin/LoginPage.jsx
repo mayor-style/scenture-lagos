@@ -41,7 +41,7 @@ const LoginPage = () => {
       const redirectTo = location.state?.from?.pathname || '/admin/dashboard';
       navigate(redirectTo);
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid email or password');
+      setError(err.response?.data?.error || 'Server Error. Please try again later.');
       console.error('Login error:', err);
     }
   };

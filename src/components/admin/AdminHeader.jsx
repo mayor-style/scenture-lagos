@@ -24,7 +24,7 @@ const AdminHeader = ({ sidebarOpen, setSidebarOpen }) => {
         <div className="flex items-center">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="md:hidden p-2 mr-4 text-secondary rounded-md hover:bg-[#D4A017]/10 focus:outline-none"
+            className="lg:hidden p-2 mr-4 text-secondary rounded-md hover:bg-[#D4A017]/10 focus:outline-none"
             aria-label="Toggle sidebar"
           >
             <Menu size={20} />

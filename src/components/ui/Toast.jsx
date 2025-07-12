@@ -57,7 +57,7 @@ export const Toast = ({
       <div className={`flex items-center justify-between p-4 border rounded-md shadow-sm ${getToastClasses()}`}>
         <div className="flex items-center">
           {getIcon()}
-          <span className="ml-3 text-sm font-medium text-secondary">{message}</span>
+          <span className="ml-3 text-sm font-medium text-secondary break-words">{message}</span>
         </div>
         <button
           onClick={() => {
@@ -66,20 +66,19 @@ export const Toast = ({
               onClose();
             }, 300);
           }}
-          className="ml-4 inline-flex text-slate-400 hover:text-slate-500 focus:outline-none"
+          className="ml-4 inline-flex p-2 text-slate-400 hover:text-slate-500 focus:outline-none"
         >
-          <X className="h-4 w-4" />
+          <X className="h-6 w-6" />
         </button>
       </div>
     </div>
   );
 };
 
-
 // Toast Container Component
 export const ToastContainer = ({ toasts, removeToast }) => {
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col space-y-2 max-w-xs w-full">
+    <div className="fixed top-[calc(1rem+env(safe-area-inset-top))] right-0 sm:right-4 z-50 flex flex-col space-y-2 max-w-[90vw] w-full">
       {toasts.map((toast) => (
         <Toast
           key={toast.id}

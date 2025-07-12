@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { Link } from 'react-router-dom';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { formatPrice } from '../../lib/utils';
 import { LoadingOverlay, LoadingState } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast';
 import InventoryService from '../../services/admin/inventory.service';
 import { debounce } from 'lodash';
 import {
@@ -24,7 +23,6 @@ import {
   ChevronRight,
   Settings,
 } from 'lucide-react';
-import PropTypes from 'prop-types';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All Status' },
@@ -36,6 +34,7 @@ const STATUS_OPTIONS = [
 const InventoryPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const {addToast} = useToast();
   const searchParams = new URLSearchParams(location.search);
 
   const [inventory, setInventory] = useState([]);
@@ -50,8 +49,8 @@ const InventoryPage = () => {
   });
   const [searchTerm, setSearchTerm] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all');
-  const [currentPage, setCurrentPage] = useState(parseInt(searchParams.get('page')) || 1);
-  const [itemsPerPage, setItemsPerPage] = useState(parseInt(searchParams.get('limit')) || 5);
+  const [currentPage, setCurrentPage] = useState(Number.isInteger(parseInt(searchParams.get('page'))) ? parseInt(searchParams.get('page')) : 1);
+  const [itemsPerPage, setItemsPerPage] = useState(Number.isInteger(parseInt(searchParams.get('limit'))) ? parseInt(searchParams.get('limit')) : 5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -84,14 +83,19 @@ const InventoryPage = () => {
         ...(statusFilter !== 'all' && { status: statusFilter }),
       };
       const data = await InventoryService.getInventory(params);
-      setInventory(data.items || []);
-      setTotalItems(data.total || 0);
+      console.log('Inventory data:', data); // For debugging
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid inventory data received');
+      }
+      setInventory(Array.isArray(data.items) ? data.items : []);
+      setTotalItems(Number.isInteger(data.total) ? data.total : 0);
     } catch (err) {
-      console.error('Error fetching inventory:', err);
-      setError(err);
+      console.error('Error fetching inventory:', err, err.response?.data);
+      const errorMessage = err.response?.data?.message || 'Failed to load inventory data';
+      setError(errorMessage);
       setInventory([]);
       setTotalItems(0);
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to load inventory data', variant: 'destructive' });
+      addToast(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -101,15 +105,17 @@ const InventoryPage = () => {
     setStatsLoading(true);
     try {
       const stats = await InventoryService.getInventoryStatistics();
+      console.log('Inventory stats:', stats); // For debugging
       setInventoryStats({
         totalProducts: stats.totalProducts || 0,
         inStockCount: stats.inStockCount || 0,
         lowStockCount: stats.lowStockCount || 0,
         outOfStockCount: stats.outOfStockCount || 0,
-        totalValue: stats.totalValue || 0,
+        totalInventoryValue: stats.totalValue || 0,
       });
     } catch (err) {
-      console.error('Error fetching inventory statistics:', err);
+      console.error('Error fetching inventory statistics:', err, err.response?.data);
+      const errorMessage = err.response?.data?.message || 'Failed to load inventory statistics';
       setInventoryStats({
         totalProducts: 0,
         inStockCount: 0,
@@ -117,7 +123,7 @@ const InventoryPage = () => {
         outOfStockCount: 0,
         totalInventoryValue: 0,
       });
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to load inventory statistics', variant: 'destructive' });
+      addToast(errorMessage, 'error');
     } finally {
       setStatsLoading(false);
     }
@@ -127,11 +133,13 @@ const InventoryPage = () => {
     setLowStockLoading(true);
     try {
       const data = await InventoryService.getLowStockItems({ limit: 10 });
-      setLowStockItems(data.items || []);
+      console.log('Low stock items:', data); // For debugging
+      setLowStockItems(Array.isArray(data.items) ? data.items : []);
     } catch (err) {
-      console.error('Error fetching low stock items:', err);
+      console.error('Error fetching low stock items:', err, err.response?.data);
+      const errorMessage = err.response?.data?.message || 'Failed to load low stock items';
       setLowStockItems([]);
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to load low stock items', variant: 'destructive' });
+      addToast(errorMessage, 'error');
     } finally {
       setLowStockLoading(false);
     }
@@ -155,6 +163,12 @@ const InventoryPage = () => {
     setCurrentPage(1);
   }, 300);
 
+  useEffect(() => {
+    return () => {
+      handleSearchChange.cancel(); // Cleanup debounce
+    };
+  }, []);
+
   const handleStatusChange = (e) => {
     setStatusFilter(e.target.value);
     setCurrentPage(1);
@@ -164,7 +178,7 @@ const InventoryPage = () => {
     fetchInventory();
     fetchInventoryStats();
     fetchLowStockItems();
-    toast({ title: 'Refreshed', description: 'Inventory data has been refreshed', variant: 'success' });
+    addToast('Inventory data has been refreshed', 'success');
   };
 
   const openAdjustmentModal = (item) => {
@@ -183,22 +197,20 @@ const InventoryPage = () => {
 
   const handleAdjustment = async () => {
     if (!adjustmentReason) {
-      toast({ title: 'Error', description: 'Please select a reason for the adjustment', variant: 'destructive' });
+      addToast('Please select a reason for the adjustment', 'error');
       return;
     }
-    
-    // Validate adjustment quantity
+
     if (adjustmentQuantity === 0) {
-      toast({ title: 'Error', description: 'Adjustment quantity cannot be zero', variant: 'destructive' });
+      addToast('Adjustment quantity cannot be zero', 'error');
       return;
     }
-    
-    // Check if adjustment would result in negative stock
+
     if (selectedItem.quantity + parseInt(adjustmentQuantity) < 0) {
-      toast({ title: 'Warning', description: 'This adjustment would result in negative stock. Please adjust the quantity.', variant: 'destructive' });
+      addToast('This adjustment would result in negative stock. Please adjust the quantity.', 'error');
       return;
     }
-    
+
     setAdjustmentLoading(true);
     try {
       await InventoryService.adjustStock(selectedItem.id, {
@@ -206,14 +218,15 @@ const InventoryPage = () => {
         reason: adjustmentReason,
         variantId: selectedItem.variantId || null,
       });
-      toast({ title: 'Success', description: 'Inventory updated successfully', variant: 'success' });
+      addToast('Inventory updated successfully', 'success');
       fetchInventory();
       fetchInventoryStats();
       fetchLowStockItems();
       closeAdjustmentModal();
     } catch (err) {
-      console.error('Error adjusting inventory:', err);
-      toast({ title: 'Error', description: err.response?.data?.message || 'Failed to update inventory', variant: 'destructive' });
+      console.error('Error adjusting inventory:', err, err.response?.data);
+      const errorMessage = err.response?.data?.message || 'Failed to update inventory';
+      addToast(errorMessage, 'error');
     } finally {
       setAdjustmentLoading(false);
     }
@@ -222,12 +235,9 @@ const InventoryPage = () => {
   const handleGenerateReport = async () => {
     try {
       const blob = await InventoryService.generateReport();
-      
-      // Validate that we received a valid blob
       if (!(blob instanceof Blob)) {
         throw new Error('Invalid report format received');
       }
-      
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
@@ -235,26 +245,21 @@ const InventoryPage = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // Clean up the URL object
       setTimeout(() => window.URL.revokeObjectURL(url), 100);
-      
-      toast({ title: 'Success', description: 'Report generated successfully', variant: 'success' });
+      addToast('Report generated successfully', 'success');
     } catch (err) {
       console.error('Error generating report:', err);
-      toast({ title: 'Error', description: err.message || 'Failed to generate report', variant: 'destructive' });
+      const errorMessage = err.message || 'Failed to generate report';
+      addToast(errorMessage, 'error');
     }
   };
 
   const handleExportCSV = async () => {
     try {
       const blob = await InventoryService.exportCSV();
-      
-      // Validate that we received a valid blob
       if (!(blob instanceof Blob)) {
         throw new Error('Invalid export format received');
       }
-      
       const url = window.URL.createObjectURL(new Blob([blob]));
       const link = document.createElement('a');
       link.href = url;
@@ -262,14 +267,12 @@ const InventoryPage = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
-      // Clean up the URL object
       setTimeout(() => window.URL.revokeObjectURL(url), 100);
-      
-      toast({ title: 'Success', description: 'CSV exported successfully', variant: 'success' });
+      addToast('CSV exported successfully', 'success');
     } catch (err) {
       console.error('Error exporting CSV:', err);
-      toast({ title: 'Error', description: err.message || 'Failed to export CSV', variant: 'destructive' });
+      const errorMessage = err.message || 'Failed to export CSV';
+      addToast(errorMessage, 'error');
     }
   };
 
@@ -311,13 +314,14 @@ const InventoryPage = () => {
           title="Failed to load inventory"
           message="There was an error loading the inventory data. Please try again."
           onRetry={fetchInventory}
+          className="py-12 px-4 sm:px-6"
         />
       ) : (
-        <div className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="space-y-6 px-0">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 px-4 sm:px-6">
             <div>
-              <h1 className="text-3xl font-heading font-medium text-secondary">Inventory Management</h1>
-              <p className="text-secondary/70 mt-1">Manage your product stock levels</p>
+              <h1 className="text-2xl sm:text-3xl font-heading font-medium text-secondary">Inventory Management</h1>
+              <p className="text-sm text-secondary/70 mt-1">Manage your product stock levels</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-3">
               <Link to="/admin/settings?tab=general">
@@ -346,9 +350,9 @@ const InventoryPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-4 sm:px-6">
             <LoadingOverlay loading={statsLoading}>
-              <Card>
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -363,7 +367,7 @@ const InventoryPage = () => {
               </Card>
             </LoadingOverlay>
             <LoadingOverlay loading={statsLoading}>
-              <Card>
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -378,7 +382,7 @@ const InventoryPage = () => {
               </Card>
             </LoadingOverlay>
             <LoadingOverlay loading={statsLoading}>
-              <Card>
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -393,7 +397,7 @@ const InventoryPage = () => {
               </Card>
             </LoadingOverlay>
             <LoadingOverlay loading={statsLoading}>
-              <Card>
+              <Card className="shadow-sm hover:shadow-md transition-shadow">
                 <CardContent className="p-6">
                   <div className="flex items-center justify-between">
                     <div>
@@ -409,8 +413,8 @@ const InventoryPage = () => {
             </LoadingOverlay>
           </div>
 
-          <Card>
-            <CardHeader>
+          <Card className="mx-0 shadow-sm">
+            <CardHeader className="px-4 sm:px-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <CardTitle>Inventory List</CardTitle>
@@ -422,16 +426,16 @@ const InventoryPage = () => {
                     <input
                       type="text"
                       placeholder="Search inventory..."
-                      value={searchTerm}
+                      defaultValue={searchTerm}
                       onChange={handleSearchChange}
-                      className="pl-10 pr-4 py-2 border border-slate-200 rounded-md w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="pl-10 pr-4 py-2 border border-slate-200 rounded-md w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-shadow hover:shadow-sm"
                       aria-label="Search inventory items"
                     />
                   </div>
                   <select
                     value={statusFilter}
                     onChange={handleStatusChange}
-                    className="px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+                    className="px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white transition-shadow hover:shadow-sm"
                     disabled={loading}
                     aria-label="Filter by stock status"
                   >
@@ -442,69 +446,83 @@ const InventoryPage = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 sm:px-6">
               <LoadingOverlay loading={loading}>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-slate-200">
-                        <th className="text-left font-medium p-3 pl-0">Product</th>
-                        <th className="text-left font-medium p-3">SKU</th>
-                        <th className="text-center font-medium p-3">Stock</th>
-                                                <th className="text-right font-medium p-3">Price</th>
-                        <th className="text-left font-medium p-3">Status</th>
-                        <th className="text-right font-medium p-3 pr-0">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {inventory.map(item => (
-                        <tr key={item.id} className="border-b border-slate-100">
-                          <td className="p-3 pl-0 font-medium">
-                            {item.name}
-                            {item.variantName && (
-                              <span className="block text-xs text-slate-500">{item.variantName}</span>
-                            )}
-                          </td>
-                          <td className="p-3">{item.sku}</td>
-                          <td className="p-3 text-center">{item.quantity}</td>
-                          <td className="p-3 text-right">{formatPrice(item.price)}</td>
-                          <td className="p-3">
-                            <span
-                              className={`px-2 py-1 text-xs rounded-full ${
-                                item.status === 'in_stock'
-                                  ? 'bg-green-100 text-green-800'
+                {inventory.length === 0 ? (
+                  <div className="text-center text-slate-500 py-6">
+                    No inventory items found
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {inventory.map(item => (
+                      <Card key={item.id || Math.random()} className="shadow-sm hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex flex-col space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mr-3">
+                                  <Package size={16} className="text-primary" />
+                                </div>
+                                <div>
+                                  <div className="font-medium text-secondary truncate">{item.name || 'Unknown'}</div>
+                                  {item.variantName && (
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {typeof item.variantName === 'string' ? item.variantName : (item.variant?.title || 'N/A')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <span
+                                className={`px-2 py-1 text-xs rounded-full ${
+                                  item.status === 'in_stock'
+                                    ? 'bg-green-100 text-green-800'
+                                    : item.status === 'low_stock'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {item.status === 'in_stock'
+                                  ? 'In Stock'
                                   : item.status === 'low_stock'
-                                  ? 'bg-yellow-100 text-yellow-800'
-                                  : 'bg-red-100 text-red-800'
-                              }`}
-                            >
-                              {item.status === 'in_stock'
-                                ? 'In Stock'
-                                : item.status === 'low_stock'
-                                ? 'Low Stock'
-                                : 'Out of Stock'}
-                            </span>
-                          </td>
-                          <td className="p-3 pr-0 text-right">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openAdjustmentModal(item)}
-                              disabled={loading || adjustmentLoading}
-                              className="flex items-center"
-                            >
-                              <Package size={16} className="mr-2" />
-                              Adjust
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                                  ? 'Low Stock'
+                                  : 'Out of Stock'}
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center text-sm">
+                                <span className="font-medium mr-2">SKU:</span>
+                                <span className="truncate">{item.sku || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <span className="font-medium mr-2">Stock:</span>
+                                <span>{item.quantity ?? 0}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <span className="font-medium mr-2">Price:</span>
+                                <span>{formatPrice(item.price || 0)}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openAdjustmentModal(item)}
+                                disabled={loading || adjustmentLoading}
+                                className="flex items-center"
+                              >
+                                <Package size={16} className="mr-2" />
+                                Adjust
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </LoadingOverlay>
             </CardContent>
-            <CardContent>
+            <CardContent className="px-4 sm:px-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div className="text-sm text-slate-500">
                   Showing {indexOfFirstItem} to {indexOfLastItem} of {totalItems} items
@@ -516,7 +534,7 @@ const InventoryPage = () => {
                       setItemsPerPage(parseInt(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+                    className="px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white transition-shadow hover:shadow-sm"
                     disabled={loading}
                     aria-label="Items per page"
                   >
@@ -562,40 +580,56 @@ const InventoryPage = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="mx-0 shadow-sm">
+            <CardHeader className="px-4 sm:px-6">
               <CardTitle>Low Stock Alerts</CardTitle>
               <CardDescription>Products requiring attention</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-4 sm:px-6">
               <LoadingOverlay loading={lowStockLoading}>
                 {lowStockItems.length === 0 ? (
                   <div className="text-center text-slate-500 py-6">
                     No low stock items found
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200">
-                          <th className="text-left font-medium p-3 pl-0">Product</th>
-                          <th className="text-left font-medium p-3">SKU</th>
-                          <th className="text-center font-medium p-3">Stock</th>
-                          <th className="text-right font-medium p-3 pr-0">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lowStockItems.map(item => (
-                          <tr key={item.id} className="border-b border-slate-100">
-                            <td className="p-3 pl-0 font-medium">
-                              {item.name}
-                              {item.variantName && (
-                                <span className="block text-xs text-slate-500">{item.variantName}</span>
-                              )}
-                            </td>
-                            <td className="p-3">{item.sku}</td>
-                            <td className="p-3 text-center">{item.quantity}</td>
-                            <td className="p-3 pr-0 text-right">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {lowStockItems.map(item => (
+                      <Card key={item.id || Math.random()} className="shadow-sm hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex flex-col space-y-4">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center mr-3">
+                                  <AlertTriangle size={16} className="text-yellow-600" />
+                                </div>
+                                <div>
+                                  <div className="font-medium text-secondary truncate">{item.name || 'Unknown'}</div>
+                                  {item.variantName && (
+                                    <div className="text-xs text-slate-500 truncate">
+                                      {typeof item.variantName === 'string' ? item.variantName : (item.variant?.title || 'N/A')}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                              <span
+                                className={`px-2 py-1 text-xs rounded-full ${
+                                  item.status === 'low_stock' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                                }`}
+                              >
+                                {item.status === 'low_stock' ? 'Low Stock' : 'Out of Stock'}
+                              </span>
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center text-sm">
+                                <span className="font-medium mr-2">SKU:</span>
+                                <span className="truncate">{item.sku || 'N/A'}</span>
+                              </div>
+                              <div className="flex items-center text-sm">
+                                <span className="font-medium mr-2">Stock:</span>
+                                <span>{item.quantity ?? 0}</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-end">
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -606,23 +640,23 @@ const InventoryPage = () => {
                                 <Package size={16} className="mr-2" />
                                 Adjust
                               </Button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
               </LoadingOverlay>
             </CardContent>
           </Card>
 
-          {showAdjustmentModal && (
+          {showAdjustmentModal && selectedItem && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
               <div className="bg-white rounded-lg shadow-lg w-full max-w-md mx-4">
                 <div className="p-6">
                   <h3 className="text-xl font-heading font-medium text-secondary mb-4">
-                    Adjust Inventory: {selectedItem?.name}
+                    Adjust Inventory: {selectedItem.name || 'Unknown'}
                   </h3>
                   <div className="space-y-4">
                     <div>
@@ -631,7 +665,7 @@ const InventoryPage = () => {
                       </label>
                       <input
                         type="text"
-                        value={selectedItem?.quantity}
+                        value={selectedItem.quantity ?? 0}
                         disabled
                         className="w-full px-4 py-2 border border-slate-200 rounded-md bg-slate-100"
                         aria-label="Current stock"
@@ -655,7 +689,7 @@ const InventoryPage = () => {
                           type="number"
                           value={adjustmentQuantity}
                           onChange={e => setAdjustmentQuantity(parseInt(e.target.value) || 0)}
-                          className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-center"
+                          className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 text-center transition-shadow hover:shadow-sm"
                           aria-label="Adjustment quantity"
                         />
                         <Button
@@ -676,7 +710,7 @@ const InventoryPage = () => {
                       <select
                         value={adjustmentReason}
                         onChange={e => setAdjustmentReason(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white"
+                        className="w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white transition-shadow hover:shadow-sm"
                         disabled={adjustmentLoading}
                         aria-label="Adjustment reason"
                       >
@@ -690,11 +724,12 @@ const InventoryPage = () => {
                       </select>
                     </div>
                   </div>
-                  <div className="flex justify-end mt-6 space-x-3">
+                  <div className="flex flex-col sm:flex-row justify-end mt-6 gap-3 sm:gap-0 sm:space-x-3">
                     <Button
                       variant="outline"
                       onClick={closeAdjustmentModal}
                       disabled={adjustmentLoading}
+                      className="w-full sm:w-auto"
                     >
                       Cancel
                     </Button>
@@ -702,7 +737,7 @@ const InventoryPage = () => {
                       variant="default"
                       onClick={handleAdjustment}
                       disabled={adjustmentLoading || !adjustmentReason}
-                      className="flex items-center"
+                      className="w-full sm:w-auto flex items-center"
                     >
                       {adjustmentLoading ? (
                         <span className="animate-spin mr-2">⟳</span>
@@ -720,28 +755,6 @@ const InventoryPage = () => {
       )}
     </>
   );
-};
-
-InventoryPage.propTypes = {
-  inventory: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.string,
-      name: PropTypes.string,
-      sku: PropTypes.string,
-      stock: PropTypes.number,
-      reorder_point: PropTypes.number,
-      price: PropTypes.number,
-      status: PropTypes.string,
-      variant: PropTypes.string,
-    })
-  ),
-  inventoryStats: PropTypes.shape({
-    totalProducts: PropTypes.number,
-    inStockCount: PropTypes.number,
-    lowStockCount: PropTypes.number,
-    outOfStockCount: PropTypes.number,
-    totalInventoryValue: PropTypes.number,
-  }),
 };
 
 export default InventoryPage;

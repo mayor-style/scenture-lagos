@@ -9,10 +9,11 @@ import { useNavigate } from 'react-router-dom';
 import DashboardService from '../../services/admin/dashboard.service';
 import { LoadingOverlay, EmptyState } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast'; // Replaced react-hot-toast with custom toast
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const { addToast } = useToast(); // Use custom toast hook
 
   // State for dashboard data
   const [summary, setSummary] = useState({
@@ -151,14 +152,14 @@ const DashboardPage = () => {
         fetchActivityFeed(),
       ]);
 
-      toast.success('Dashboard data refreshed');
+      addToast('Dashboard data refreshed', 'success'); // Updated to use custom toast
     } catch (err) {
       if (retryCount < maxRetries) {
-        toast(`Retrying ${retryCount + 1} of ${maxRetries}...`, { icon: '🔄' });
+        addToast(`Retrying ${retryCount + 1} of ${maxRetries}...`, 'info'); // Updated to use custom toast
         setTimeout(() => fetchDashboardData(retryCount + 1), 1000);
       } else {
         setError(err.response?.data?.message || 'Failed to refresh dashboard data');
-        toast.error(err.response?.data?.message || 'Failed to refresh dashboard data');
+        addToast(err.response?.data?.message || 'Failed to refresh dashboard data', 'error'); // Updated to use custom toast
       }
     }
   };
@@ -226,16 +227,16 @@ const DashboardPage = () => {
       </Helmet>
 
       <div className="space-y-8 px-0">
-        <div className="flex flex-col space-y-6 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col space-y-6 md:space-y-0 md:flex-row md:items-center md:justify-between">
           <div className="space-y-2">
-            <h1 className="text-3xl sm:text-4xl font-heading font-light text-secondary tracking-tight">
+            <h1 className="dashboardHeading">
               Dashboard
             </h1>
-            <p className="text-secondary/60 text-sm sm:text-base font-light">
+            <p className="dashboardSubHeading">
               Welcome back to your admin dashboard
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col md:flex-row gap-3">
             <Button
               variant="outline"
               className="flex items-center justify-center h-11 px-6 border-secondary/20 hover:border-secondary/40 hover:bg-secondary/5 transition-all duration-200 backdrop-blur-sm"
@@ -270,12 +271,12 @@ const DashboardPage = () => {
                   clearInterval(pollingInterval);
                   setPollingInterval(null);
                   setIsPolling(false);
-                  toast.success('Real-time updates disabled');
+                  addToast('Real-time updates disabled', 'success'); // Updated to use custom toast
                 } else {
                   const interval = setInterval(() => fetchDashboardData(), 60000); // Poll every 60 seconds
                   setPollingInterval(interval);
                   setIsPolling(true);
-                  toast.success('Real-time updates enabled');
+                  addToast('Real-time updates enabled', 'success'); // Updated to use custom toast
                 }
               }}
               disabled={loading || salesLoading || ordersLoading || activityLoading}

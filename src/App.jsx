@@ -50,9 +50,9 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <h1>Something went wrong</h1>
-          <p>{this.state.error?.message || 'An unexpected error occurred.'}</p>
+        <div className='bg-red-500' style={{ padding: '20px', textAlign: 'center' }}>
+          <h1 className='dashboardHeading'>Something went wrong</h1>
+          <p className='dashboardSubHeading'> An unexpected error occurred, please try again later.</p>
         </div>
       );
     }

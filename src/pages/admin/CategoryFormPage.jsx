@@ -10,18 +10,19 @@ import {
   X,
   AlertCircle
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { useToast } from '../../components/ui/Toast'; // Replaced react-hot-toast with custom toast
 
 import ProductService from '../../services/admin/product.service';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
-import {LoadingState} from '../../components/ui/LoadingState';
+import { LoadingState } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 
 const CategoryFormPage = () => {
   const { id, action } = useParams();
   const navigate = useNavigate();
+  const { addToast } = useToast(); // Use custom toast hook
   const isViewMode = action === 'view';
   const isEditMode = action === 'edit' || (id && !action);
   const isNewMode = !id && !action;
@@ -56,7 +57,6 @@ const CategoryFormPage = () => {
         if (id && (isEditMode || isViewMode)) {
           const categoryResponse = await ProductService.getCategory(id);
           const categoryData = categoryResponse.data;
-          console.log(categoryData.category.name)
           
           setCategory({
             name: categoryData.category.name || '',
@@ -155,10 +155,10 @@ const CategoryFormPage = () => {
       let response;
       if (isEditMode) {
         response = await ProductService.updateCategory(id, formData);
-        toast.success('Category updated successfully');
+        addToast('Category updated successfully', 'success'); // Updated to use custom toast
       } else {
         response = await ProductService.createCategory(formData);
-        toast.success('Category created successfully');
+        addToast('Category created successfully', 'success'); // Updated to use custom toast
       }
 
       // Clear categories cache to ensure fresh data
@@ -174,7 +174,7 @@ const CategoryFormPage = () => {
         setValidationErrors(err.response.data.errors);
       }
       
-      toast.error(err.response?.data?.message || 'Failed to save category');
+      addToast(err.response?.data?.message || 'Failed to save category', 'error'); // Updated to use custom toast
     } finally {
       setSaving(false);
     }
@@ -185,7 +185,7 @@ const CategoryFormPage = () => {
     setSaving(true);
     try {
       await ProductService.deleteCategory(id);
-      toast.success('Category deleted successfully');
+      addToast('Category deleted successfully', 'success'); // Updated to use custom toast
       
       // Clear categories cache to ensure fresh data
       localStorage.removeItem('categories');
@@ -194,7 +194,7 @@ const CategoryFormPage = () => {
       navigate('/admin/categories');
     } catch (err) {
       console.error('Error deleting category:', err);
-      toast.error(err.response?.data?.message || 'Failed to delete category');
+      addToast(err.response?.data?.message || 'Failed to delete category', 'error'); // Updated to use custom toast
     } finally {
       setSaving(false);
       setDeleteModalOpen(false);
@@ -218,8 +218,8 @@ const CategoryFormPage = () => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-heading font-medium text-secondary">{getPageTitle()}</h1>
-            <p className="text-secondary/70 mt-1">
+            <h1 className="dashboardHeading">{getPageTitle()}</h1>
+            <p className="dashboardSubHeading">
               {isViewMode
                 ? 'View category details'
                 : isEditMode

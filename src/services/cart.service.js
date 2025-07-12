@@ -22,7 +22,8 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart
    */
   addToCart: async (cartItem) => {
-    const response = await api.post('/cart/items', cartItem);
+    const response = await api.post('/cart', cartItem);
+    console.log('fgghj')
     return response.data;
   },
 
@@ -34,7 +35,7 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart
    */
   updateCartItem: async (itemId, updateData) => {
-    const response = await api.put(`/cart/items/${itemId}`, updateData);
+    const response = await api.put(`/cart/${itemId}`, updateData);
     return response.data;
   },
 
@@ -44,7 +45,7 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart
    */
   removeFromCart: async (itemId) => {
-    const response = await api.delete(`/cart/items/${itemId}`);
+    const response = await api.delete(`/cart/${itemId}`);
     return response.data;
   },
 
@@ -53,7 +54,7 @@ const CartService = {
    * @returns {Promise<Object>} Empty cart
    */
   clearCart: async () => {
-    const response = await api.delete('/cart/items');
+    const response = await api.delete('/cart');
     return response.data;
   },
 
