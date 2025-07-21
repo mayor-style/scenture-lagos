@@ -16,11 +16,16 @@ export function cn(...inputs) {
  * @param {string} [currency='NGN'] - The currency code (default: 'NGN')
  * @returns {string} Formatted price string
  */
-export function formatPrice(price, currency = 'NGN') {
-  return new Intl.NumberFormat('en-NG', {
-    style: 'currency',
-    currency,
-  }).format(price);
+export function formatPrice(price, { currency = 'NGN', notation = 'standard' } = {}) {
+  const formatterOptions = {
+    style: notation === 'compact' ? 'decimal' : 'currency',
+    currency: notation === 'compact' ? undefined : currency,
+    notation,
+    minimumFractionDigits: notation === 'compact' ? 0 : 2,
+    maximumFractionDigits: notation === 'compact' ? 1 : 2,
+  };
+
+  return new Intl.NumberFormat('en-NG', formatterOptions).format(price);
 }
 
 /**

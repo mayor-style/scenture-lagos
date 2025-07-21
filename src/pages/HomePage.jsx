@@ -1,16 +1,29 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import ProductCard from '../components/product/ProductCard';
-import { products, testimonials } from '../lib/mockData';
+import ProductService from '../services/product.service';
+import { testimonials } from '../lib/mockData';
 
 const HomePage = () => {
-  // Featured products (first 4)
-  const featuredProducts = products.slice(0, 4);
+  const [featuredProducts, setFeaturedProducts] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Enhanced animation variants
+  useEffect(() => {
+    const fetchFeaturedProducts = async () => {
+      setIsLoading(true);
+      const products = await ProductService.getFeaturedProducts();
+      setFeaturedProducts(products);
+      console.log('products frm Homepage', products);
+      setIsLoading(false);
+    };
+
+    fetchFeaturedProducts();
+  }, []);
+
+  // Animation variants
   const fadeInUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { 
@@ -59,7 +72,7 @@ const HomePage = () => {
 
   return (
     <div className="flex flex-col">
-      {/* Hero Section - Enhanced minimal design */}
+      {/* Hero Section */}
       <section className="relative min-h-[95vh] bg-gradient-to-br from-neutral-50 via-white to-neutral-100 flex items-center overflow-hidden">
         <div className="absolute inset-0 z-0">
           <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/60 to-transparent z-10"></div>
@@ -70,7 +83,6 @@ const HomePage = () => {
           />
         </div>
         
-        {/* Subtle geometric elements */}
         <div className="absolute top-20 right-20 w-32 h-32 border border-neutral-200/40 rounded-full"></div>
         <div className="absolute bottom-40 right-40 w-16 h-16 bg-neutral-100/60 rounded-full"></div>
         
@@ -117,7 +129,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Featured Products Section - Enhanced spacing and typography */}
+      {/* Featured Products Section */}
       <section className="py-24 lg:py-32 bg-white">
         <div className="container px-6 lg:px-12">
           <motion.div
@@ -139,19 +151,48 @@ const HomePage = () => {
             </p>
           </motion.div>
 
-          <motion.div
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={staggerContainer}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10 mb-16"
-          >
-            {featuredProducts.map((product) => (
-              <motion.div key={product.id} variants={scaleIn}>
-                <ProductCard product={product} />
-              </motion.div>
-            ))}
-          </motion.div>
+          {isLoading ? (
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-100px" }}
+              variants={staggerContainer}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10 mb-16"
+            >
+              {[...Array(4)].map((_, index) => (
+                <motion.div key={index} variants={scaleIn}>
+                  <div className="animate-pulse">
+                    <div className="aspect-square bg-neutral-200 rounded-lg mb-4"></div>
+                    <div className="h-4 bg-neutral-200 rounded w-3/4 mb-2"></div>
+                    <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
+                  </div>
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-100px" }}
+              variants={staggerContainer}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10 mb-16"
+            >
+              {featuredProducts.map((product) => (
+                <motion.div key={product._id} variants={scaleIn}>
+                  <ProductCard
+                    product={{
+                      id: product._id,
+                      name: product.name,
+                      price: product.price,
+                      images: product.images,
+                      category: product.category?.name || 'Uncategorized',
+                      slug:product.slug,
+                    }}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
 
           <motion.div
             initial="hidden"
@@ -167,7 +208,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Brand Story Section - Enhanced visual hierarchy */}
+      {/* Brand Story Section */}
       <section className="py-24 lg:py-32 bg-neutral-50">
         <div className="container px-6 lg:px-12">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-20 items-center">
@@ -185,7 +226,6 @@ const HomePage = () => {
                   className="w-full h-full object-cover"
                 />
               </div>
-              {/* Subtle accent element */}
               <div className="absolute -bottom-4 -right-4 w-20 h-20 bg-white border border-neutral-200"></div>
             </motion.div>
             
@@ -225,7 +265,7 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Testimonials Section - Refined card design */}
+      {/* Testimonials Section */}
       <section className="py-24 lg:py-32 bg-white">
         <div className="container px-6 lg:px-12">
           <motion.div
@@ -282,9 +322,6 @@ const HomePage = () => {
           </motion.div>
         </div>
       </section>
-
-      {/* Newsletter Section - Elegant minimal design */}
-    
     </div>
   );
 };

@@ -1,16 +1,16 @@
-// src/pages/admin/CategoryFormPage.jsx
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
-import { 
-  ArrowLeft, 
-  Save, 
-  Trash, 
-  Edit, 
-  Upload, 
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  ArrowLeft,
+  Save,
+  Trash2,
+  Edit,
+  Upload,
   X,
   AlertCircle,
-  Loader2
+  Loader2,
 } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
 import { useRefresh } from '../../contexts/RefreshContext';
@@ -18,9 +18,27 @@ import ProductService from '../../services/admin/product.service';
 import DashboardService from '../../services/admin/dashboard.service';
 import { Button } from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
+import { Input } from '../../components/ui/Input';
+import { Textarea } from '../../components/ui/Textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/Select';
 import { LoadingOverlay } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
+
+const fieldVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.3 } },
+};
 
 const CategoryFormPage = () => {
   const { id, action } = useParams();
@@ -31,11 +49,10 @@ const CategoryFormPage = () => {
   const isEditMode = action === 'edit' || (id && !action);
   const isNewMode = !id && !action;
 
-  // State variables
   const [category, setCategory] = useState({
     name: '',
     description: '',
-    parent: '',
+    parent: 'none',
     featured: false,
   });
   const [categories, setCategories] = useState([]);
@@ -46,17 +63,14 @@ const CategoryFormPage = () => {
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [imageLoading, setImageLoading] = useState(false);
 
-  // Validate ObjectId format
   const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
 
-  // Fetch category data and all categories for parent selection
   useEffect(() => {
     const fetchData = async () => {
-      console.log('id from category form', id)
-      // Validate ID for edit/view modes
       if ((isEditMode || isViewMode) && (!id || !isValidObjectId(id))) {
-        console.warn(`Invalid category ID: ${id}`);
         addToast('Invalid category ID', 'error');
         navigate('/admin/categories', { replace: true });
         return;
@@ -65,7 +79,6 @@ const CategoryFormPage = () => {
       setLoading(true);
       setError(null);
       try {
-        // Fetch all categories for parent dropdown
         const cacheKey = `categories_${JSON.stringify({})}`;
         const cachedCategories = ProductService.getCachedData(cacheKey);
         if (cachedCategories && !needsRefresh) {
@@ -75,7 +88,6 @@ const CategoryFormPage = () => {
           setCategories(categoriesResponse.data || []);
         }
 
-        // Fetch specific category for edit/view modes
         if (id && (isEditMode || isViewMode)) {
           const categoryCacheKey = `category_${id}`;
           const cachedCategory = ProductService.getCachedData(categoryCacheKey);
@@ -83,20 +95,19 @@ const CategoryFormPage = () => {
             setCategory({
               name: cachedCategory.data.category.name || '',
               description: cachedCategory.data.category.description || '',
-              parent: cachedCategory.data.category.parent || '',
+              parent: cachedCategory.data.category.parent || 'none',
               featured: cachedCategory.data.category.featured || false,
             });
             if (cachedCategory.data.image) {
               setImagePreview(cachedCategory.data.image);
             }
           } else {
-            console.log(`Fetching category with ID: ${id}`);
             const categoryResponse = await ProductService.getCategory(id);
             const categoryData = categoryResponse.data;
             setCategory({
               name: categoryData.category.name || '',
               description: categoryData.category.description || '',
-              parent: categoryData.category.parent || '',
+              parent: categoryData.category.parent || 'none',
               featured: categoryData.category.featured || false,
             });
             if (categoryData.image) {
@@ -105,7 +116,6 @@ const CategoryFormPage = () => {
           }
         }
       } catch (err) {
-        console.error('Error fetching data:', err);
         setError(err.response?.data?.message || 'Failed to fetch data');
         addToast(err.response?.data?.message || 'Failed to fetch data', 'error');
       } finally {
@@ -116,24 +126,20 @@ const CategoryFormPage = () => {
     fetchData();
   }, [id, isEditMode, isViewMode, needsRefresh, navigate, addToast]);
 
-  // Handle form input changes
-  const handleInputChange = (e) => {
+  const handleInputChange = (name, value) => {
     if (isViewMode) return;
-    const { name, value, type, checked } = e.target;
-    setCategory(prev => ({
+    setCategory((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value,
+      [name]: value,
     }));
-    
     if (validationErrors[name]) {
-      setValidationErrors(prev => ({
+      setValidationErrors((prev) => ({
         ...prev,
         [name]: undefined,
       }));
     }
   };
 
-  // Handle image selection with compression
   const compressImage = async (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -185,6 +191,7 @@ const CategoryFormPage = () => {
     if (isViewMode) return;
     const file = e.target.files[0];
     if (file) {
+      setImageLoading(true);
       try {
         const compressedFile = await compressImage(file);
         setImageFile(compressedFile);
@@ -195,18 +202,52 @@ const CategoryFormPage = () => {
         reader.readAsDataURL(compressedFile);
       } catch (err) {
         addToast('Failed to process image', 'error');
+      } finally {
+        setImageLoading(false);
       }
     }
   };
 
-  // Remove selected image
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    if (isViewMode) return;
+    setIsDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      setImageLoading(true);
+      try {
+        const compressedFile = await compressImage(file);
+        setImageFile(compressedFile);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result);
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (err) {
+        addToast('Failed to process image', 'error');
+      } finally {
+        setImageLoading(false);
+      }
+    } else {
+      addToast('Please drop a valid image file', 'error');
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    if (!isViewMode) setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
   const handleRemoveImage = () => {
     if (isViewMode) return;
     setImageFile(null);
     setImagePreview(null);
   };
 
-  // Validate form
   const validateForm = () => {
     const errors = {};
     if (!category.name.trim()) {
@@ -219,7 +260,6 @@ const CategoryFormPage = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isViewMode) return;
@@ -230,7 +270,7 @@ const CategoryFormPage = () => {
       const formData = new FormData();
       formData.append('name', category.name);
       formData.append('description', category.description);
-      if (category.parent) {
+      if (category.parent !== 'none') {
         formData.append('parent', category.parent);
       }
       formData.append('featured', category.featured);
@@ -251,7 +291,6 @@ const CategoryFormPage = () => {
       setNeedsRefresh(true);
       navigate('/admin/categories');
     } catch (err) {
-      console.error('Error saving category:', err);
       if (err.response?.data?.errors) {
         setValidationErrors(err.response.data.errors);
       }
@@ -261,7 +300,6 @@ const CategoryFormPage = () => {
     }
   };
 
-  // Handle category deletion
   const handleDelete = async () => {
     if (isViewMode) return;
     setSaving(true);
@@ -273,7 +311,6 @@ const CategoryFormPage = () => {
       setNeedsRefresh(true);
       navigate('/admin/categories');
     } catch (err) {
-      console.error('Error deleting category:', err);
       addToast(err.response?.data?.message || 'Failed to delete category', 'error');
     } finally {
       setSaving(false);
@@ -281,7 +318,6 @@ const CategoryFormPage = () => {
     }
   };
 
-  // Page title based on mode
   const getPageTitle = () => {
     if (isViewMode) return 'View Category';
     if (isEditMode) return 'Edit Category';
@@ -291,14 +327,25 @@ const CategoryFormPage = () => {
   return (
     <>
       <Helmet>
-        <title>{getPageTitle()} | Scenture Lagos Admin</title>
+        <title>{getPageTitle()} | Scenture Admin</title>
       </Helmet>
-
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="container mx-auto space-y-6 py-6 sm:py-8 px-4 sm:px-6 max-w-7xl"
+      >
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        >
           <div>
-            <h1 className="dashboardHeading">{getPageTitle()}</h1>
-            <p className="dashboardSubHeading">
+            <h1 className="text-2xl sm:text-3xl font-heading font-medium text-secondary tracking-tight">
+              {getPageTitle()}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">
               {isViewMode
                 ? 'View category details'
                 : isEditMode
@@ -309,224 +356,278 @@ const CategoryFormPage = () => {
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
-              className="flex items-center"
+              size="sm"
               onClick={() => navigate('/admin/categories')}
+              className="hover:bg-primary/10"
+              aria-label="Back to categories"
             >
-              <ArrowLeft size={16} className="mr-2" />
-              Back to Categories
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
             </Button>
             {isViewMode && (
               <Button
                 variant="default"
-                className="flex items-center"
+                size="sm"
                 onClick={() => navigate(`/admin/categories/${id}/edit`)}
+                className="bg-primary hover:bg-primary-dark"
+                aria-label="Edit category"
               >
-                <Edit size={16} className="mr-2" />
+                <Edit className="mr-2 h-4 w-4" />
                 Edit
               </Button>
             )}
             {(isViewMode || isEditMode) && (
               <Button
                 variant="outline"
-                className="flex items-center text-red-500 hover:bg-red-50"
+                size="sm"
                 onClick={() => setDeleteModalOpen(true)}
+                className="hover:bg-destructive/10 hover:text-destructive"
+                aria-label="Delete category"
               >
-                <Trash size={16} className="mr-2" />
+                <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </Button>
             )}
           </div>
-        </div>
+        </motion.header>
 
         <LoadingOverlay loading={loading}>
           {error ? (
-            <ErrorState
-              message={error}
-              onRetry={async () => {
-                ProductService.clearCache();
-                await fetchData();
-              }}
-            />
+            <motion.div variants={cardVariants}>
+              <ErrorState
+                message={error}
+                onRetry={async () => {
+                  ProductService.clearCache();
+                  await fetchData();
+                }}
+              />
+            </motion.div>
           ) : (
             <form onSubmit={handleSubmit}>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h2 className="text-xl font-medium text-secondary mb-4">Category Information</h2>
-                      <div className="space-y-4">
-                        <div>
-                          <label htmlFor="name" className="block text-sm font-medium text-secondary mb-1">
-                            Category Name <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            id="name"
-                            name="name"
-                            type="text"
-                            value={category.name}
-                            onChange={handleInputChange}
-                            disabled={isViewMode}
-                            className={`w-full px-4 py-2 border ${validationErrors.name ? 'border-red-500' : 'border-slate-200'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 ${isViewMode ? 'bg-slate-50' : ''}`}
-                          />
-                          {validationErrors.name && (
-                            <p className="mt-1 text-sm text-red-500">{validationErrors.name}</p>
-                          )}
+                  <motion.div variants={cardVariants}>
+                    <Card className="border-primary/20 bg-background shadow-sm">
+                      <CardContent className="p-6">
+                        <h2 className="text-xl font-heading text-secondary mb-4">Category Information</h2>
+                        <div className="space-y-6">
+                          <motion.div variants={fieldVariants}>
+                            <label htmlFor="name" className="block text-sm font-medium text-secondary mb-1.5">
+                              Category Name <span className="text-destructive">*</span>
+                            </label>
+                            <Input
+                              id="name"
+                              name="name"
+                              type="text"
+                              value={category.name}
+                              onChange={(e) => handleInputChange('name', e.target.value)}
+                              disabled={isViewMode}
+                              placeholder="Enter category name"
+                              className={validationErrors.name ? 'border-destructive' : ''}
+                              aria-invalid={validationErrors.name ? 'true' : 'false'}
+                            />
+                            {validationErrors.name && (
+                              <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="mt-1 text-sm text-destructive"
+                              >
+                                {validationErrors.name}
+                              </motion.p>
+                            )}
+                          </motion.div>
+                          <motion.div variants={fieldVariants}>
+                            <label htmlFor="description" className="block text-sm font-medium text-secondary mb-1.5">
+                              Description
+                            </label>
+                            <Textarea
+                              id="description"
+                              name="description"
+                              value={category.description}
+                              onChange={(e) => handleInputChange('description', e.target.value)}
+                              disabled={isViewMode}
+                              rows={4}
+                              placeholder="Enter category description"
+                              className="resize-none"
+                            />
+                          </motion.div>
+                          <motion.div variants={fieldVariants}>
+                            <label htmlFor="parent" className="block text-sm font-medium text-secondary mb-1.5">
+                              Parent Category
+                            </label>
+                            <Select
+                              value={category.parent}
+                              onValueChange={(value) => handleInputChange('parent', value)}
+                              disabled={isViewMode}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select parent category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None (Top Level Category)</SelectItem>
+                                {categories
+                                  .filter((cat) => cat._id !== id)
+                                  .map((cat) => (
+                                    <SelectItem key={cat._id} value={cat._id}>
+                                      {cat.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            {validationErrors.parent && (
+                              <motion.p
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="mt-1 text-sm text-destructive"
+                              >
+                                {validationErrors.parent}
+                              </motion.p>
+                            )}
+                          </motion.div>
+                          <motion.div variants={fieldVariants} className="flex items-center">
+                            <input
+                              id="featured"
+                              name="featured"
+                              type="checkbox"
+                              checked={category.featured}
+                              onChange={(e) => handleInputChange('featured', e.target.checked)}
+                              disabled={isViewMode}
+                              className="h-4 w-4 rounded border-muted text-primary focus:ring-primary/50"
+                            />
+                            <label htmlFor="featured" className="ml-2 text-sm text-secondary">
+                              Featured Category (highlighted in store)
+                            </label>
+                          </motion.div>
                         </div>
-                        <div>
-                          <label htmlFor="description" className="block text-sm font-medium text-secondary mb-1">
-                            Description
-                          </label>
-                          <textarea
-                            id="description"
-                            name="description"
-                            value={category.description}
-                            onChange={handleInputChange}
-                            disabled={isViewMode}
-                            rows={4}
-                            className={`w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 ${isViewMode ? 'bg-slate-50' : ''}`}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor="parent" className="block text-sm font-medium text-secondary mb-1">
-                            Parent Category
-                          </label>
-                          <select
-                            id="parent"
-                            name="parent"
-                            value={category.parent}
-                            onChange={handleInputChange}
-                            disabled={isViewMode}
-                            className={`w-full px-4 py-2 border ${validationErrors.parent ? 'border-red-500' : 'border-slate-200'} rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50 bg-white ${isViewMode ? 'bg-slate-50' : ''}`}
-                          >
-                            <option value="">None (Top Level Category)</option>
-                            {categories
-                              .filter(cat => cat._id !== id)
-                              .map(cat => (
-                                <option key={cat._id} value={cat._id}>
-                                  {cat.name}
-                                </option>
-                              ))}
-                          </select>
-                          {validationErrors.parent && (
-                            <p className="mt-1 text-sm text-red-500">{validationErrors.parent}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center">
-                          <input
-                            id="featured"
-                            name="featured"
-                            type="checkbox"
-                            checked={category.featured}
-                            onChange={handleInputChange}
-                            disabled={isViewMode}
-                            className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/50"
-                          />
-                          <label htmlFor="featured" className="ml-2 block text-sm text-secondary">
-                            Featured Category (will be highlighted in store)
-                          </label>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                 </div>
                 <div className="space-y-6">
-                  <Card>
-                    <CardContent className="p-6">
-                      <h2 className="text-xl font-medium text-secondary mb-4">Category Image</h2>
-                      <div className="space-y-4">
-                        {imagePreview ? (
-                          <div className="relative">
-                            <img
-                              src={imagePreview}
-                              alt="Category preview"
-                              className="w-full h-48 object-cover rounded-md"
-                            />
-                            {!isViewMode && (
-                              <button
-                                type="button"
-                                onClick={handleRemoveImage}
-                                className="absolute top-2 right-2 p-1 bg-white rounded-full shadow-md hover:bg-slate-100"
-                              >
-                                <X size={16} className="text-secondary" />
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="border-2 border-dashed border-slate-200 rounded-md p-6 flex flex-col items-center justify-center text-center">
-                            <div className="mb-3 p-3 bg-slate-100 rounded-full">
-                              <Upload size={24} className="text-slate-400" />
+                  <motion.div variants={cardVariants}>
+                    <Card className="border-primary/20 bg-background shadow-sm">
+                      <CardContent className="p-6">
+                        <h2 className="text-xl font-heading text-secondary mb-4">Category Image</h2>
+                        <div
+                          className={`border-2 border-dashed rounded-md p-6 flex flex-col items-center justify-center text-center transition-colors ${
+                            isDragging && !isViewMode ? 'border-primary bg-primary/10' : 'border-muted'
+                          }`}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                        >
+                          {imageLoading ? (
+                            <motion.div
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              className="flex flex-col items-center"
+                            >
+                              <Loader2 className="h-8 w-8 text-primary animate-spin mb-2" />
+                              <p className="text-sm text-secondary">Processing image...</p>
+                            </motion.div>
+                          ) : imagePreview ? (
+                            <div className="relative w-full">
+                              <motion.img
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                src={imagePreview}
+                                alt="Category preview"
+                                className="w-full h-48 object-cover rounded-md"
+                              />
+                              {!isViewMode && (
+                                <motion.button
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  type="button"
+                                  onClick={handleRemoveImage}
+                                  className="absolute top-2 right-2 p-1.5 bg-background rounded-full shadow-md hover:bg-muted"
+                                  aria-label="Remove image"
+                                >
+                                  <X className="h-4 w-4 text-secondary" />
+                                </motion.button>
+                              )}
                             </div>
-                            <p className="text-sm text-secondary mb-1">No image uploaded</p>
-                            <p className="text-xs text-secondary/70 mb-3">
-                              Recommended size: 800x600px, max 2MB
-                            </p>
-                            {!isViewMode && (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                className="relative overflow-hidden"
-                              >
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  onChange={handleImageChange}
-                                  className="absolute inset-0 opacity-0 cursor-pointer"
-                                />
-                                Upload Image
-                              </Button>
-                            )}
-                          </div>
-                        )}
-                        {imagePreview && !isViewMode && (
-                          <div className="flex justify-center">
+                          ) : (
+                            <>
+                              <div className="mb-3 p-3 bg-muted rounded-full">
+                                <Upload className="h-6 w-6 text-muted-foreground" />
+                              </div>
+                              <p className="text-sm text-secondary mb-1">No image uploaded</p>
+                              <p className="text-xs text-muted-foreground mb-3">
+                                Recommended size: 800x600px, max 2MB
+                              </p>
+                              {!isViewMode && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="relative overflow-hidden hover:bg-primary/10"
+                                >
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageChange}
+                                    className="absolute inset-0 opacity-0 cursor-pointer"
+                                    aria-label="Upload category image"
+                                  />
+                                  Upload Image
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        {imagePreview && !isViewMode && !imageLoading && (
+                          <div className="flex justify-center mt-4">
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
-                              className="relative overflow-hidden"
+                              className="relative overflow-hidden hover:bg-primary/10"
                             >
                               <input
                                 type="file"
                                 accept="image/*"
                                 onChange={handleImageChange}
                                 className="absolute inset-0 opacity-0 cursor-pointer"
+                                aria-label="Change category image"
                               />
                               Change Image
                             </Button>
                           </div>
                         )}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
                   {!isViewMode && (
-                    <div className="flex justify-end">
+                    <motion.div variants={fieldVariants} className="flex justify-end">
                       <Button
                         type="submit"
                         variant="default"
-                        className="w-full flex items-center justify-center"
+                        size="sm"
+                        className="w-full sm:w-auto bg-primary hover:bg-primary-dark"
                         disabled={saving}
+                        aria-label={isEditMode ? 'Update category' : 'Create category'}
                       >
                         {saving ? (
                           <>
-                            <Loader2 size={16} className="mr-2 animate-spin" />
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Saving...
                           </>
                         ) : (
                           <>
-                            <Save size={16} className="mr-2" />
+                            <Save className="mr-2 h-4 w-4" />
                             {isEditMode ? 'Update Category' : 'Create Category'}
                           </>
                         )}
                       </Button>
-                    </div>
+                    </motion.div>
                   )}
                 </div>
               </div>
             </form>
           )}
         </LoadingOverlay>
-      </div>
+      </motion.div>
 
       <ConfirmationModal
         isOpen={deleteModalOpen}
@@ -534,15 +635,17 @@ const CategoryFormPage = () => {
         onConfirm={handleDelete}
         title="Delete Category"
         message={
-          <>
-            <p className="mb-4">Are you sure you want to delete "{category.name}"? This action cannot be undone.</p>
-            <div className="flex items-center p-3 bg-amber-50 text-amber-800 rounded-md">
-              <AlertCircle size={20} className="mr-2 flex-shrink-0" />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <p className="mb-4 text-secondary">
+              Are you sure you want to delete "{category.name}"? This action cannot be undone.
+            </p>
+            <div className="flex items-start p-3 bg-amber-50 text-amber-800 rounded-md">
+              <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
               <p className="text-sm">
                 If this category has products or subcategories, the deletion will fail. You must reassign or delete those items first.
               </p>
             </div>
-          </>
+          </motion.div>
         }
         confirmText="Delete"
         confirmVariant="danger"

@@ -1,4 +1,3 @@
-// src/App.jsx
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
@@ -15,6 +14,10 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 import AddCustomerPage from './pages/admin/AddCustomerPage';
 import EditCustomerPage from './pages/admin/EditCustomerPage';
 import InventoryHistory from './pages/admin/InventoryHistory';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './components/ui/Card';
+import { Button } from './components/ui/Button';
+import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Lazy-loaded components for performance
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -43,19 +46,102 @@ const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
-  state = { hasError: false, error: null };
+  state = { hasError: false, error: null, showDetails: false };
 
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
 
+  toggleDetails = () => {
+    this.setState(prev => ({ ...prev, showDetails: !prev.showDetails }));
+  };
+
+  handleGoBack = () => {
+    // Use window.history to navigate back, as useNavigate isn't available in class components
+    window.history.back();
+  };
+
+  handleTryAgain = () => {
+    window.location.reload();
+  };
+
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <h1>Something went wrong</h1>
-          <p>An unexpected error occurred, please try again later.</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="min-h-screen flex items-center justify-center bg-slate-50 px-4"
+        >
+          <Card className="w-full max-w-lg border-slate-200 shadow-lg">
+            <CardHeader className="text-center">
+              <div className="flex justify-center mb-4">
+                <AlertTriangle size={48} className="text-red-500" />
+              </div>
+              <CardTitle className="text-2xl font-semibold text-slate-900">
+                Oops, Something Went Wrong
+              </CardTitle>
+              <CardDescription className="text-slate-500">
+                An unexpected error occurred. Please try again or return to the previous page.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-center gap-4">
+                <Button
+                  onClick={this.handleTryAgain}
+                  className="bg-slate-900 text-white hover:bg-slate-800"
+                >
+                  Try Again
+                </Button>
+                <Button
+                  onClick={this.handleGoBack}
+                  variant="outline"
+                  className="text-slate-900 border-slate-200 hover:bg-slate-100"
+                >
+                  Go Back
+                </Button>
+              </div>
+              <div className="text-center">
+                <Button
+                  onClick={this.toggleDetails}
+                  variant="ghost"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                >
+                  {this.state.showDetails ? (
+                    <>
+                      Hide Details <ChevronUp size={16} className="ml-2" />
+                    </>
+                  ) : (
+                    <>
+                      Show Details <ChevronDown size={16} className="ml-2" />
+                    </>
+                  )}
+                </Button>
+              </div>
+              <AnimatePresence>
+                {this.state.showDetails && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="bg-slate-100 p-4 rounded-md text-sm text-slate-700 overflow-auto max-h-48"
+                  >
+                    <p>
+                      <strong>Error Message:</strong> {this.state.error?.message || 'Unknown error'}
+                    </p>
+                    {this.state.error?.stack && (
+                      <pre className="mt-2 text-xs text-slate-600">
+                        {this.state.error.stack}
+                      </pre>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </CardContent>
+          </Card>
+        </motion.div>
       );
     }
     return this.props.children;
@@ -84,7 +170,7 @@ const App = () => {
                         <Route path="/" element={<HomePage />} />
                         <Route path="/shop" element={<ShopPage />} />
                         <Route path="/shop/:category" element={<ShopPage />} />
-                        <Route path="/product/:id" element={<ProductDetailPage />} />
+                        <Route path="/product/:slug" element={<ProductDetailPage />} />
                         <Route path="/cart" element={<CartPage />} />
                         <Route path="/checkout" element={<CheckoutPage />} />
                         <Route path="/about" element={<AboutPage />} />

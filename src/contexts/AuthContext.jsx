@@ -81,7 +81,6 @@ export const AuthProvider = ({ children }) => {
   };
 useEffect(()=>{
   
-console.log('current user', currentUser)
 }, [adminLogin])
 
   /**

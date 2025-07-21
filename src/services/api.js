@@ -1,8 +1,14 @@
 import axios from 'axios';
 
+
+// Determine base URL based on environment
+const baseURL =
+  import.meta.env.MODE === 'development'
+    ? import.meta.env.VITE_LOCAL_BASE_URL
+    : import.meta.env.VITE_BASE_URL;
 // Create axios instance with default config
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://scenture-lagos-server.onrender.com/api/v1',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },

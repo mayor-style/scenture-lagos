@@ -1,22 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Filter, ChevronDown, Grid3X3, LayoutGrid } from 'lucide-react';
+import { Filter, ChevronDown, Grid3X3 } from 'lucide-react';
 import ProductCard from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import { products, categories } from '../lib/mockData';
+import ProductService from '../services/product.service';
 
 const ShopPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filteredProducts, setFilteredProducts] = useState(products);
+  const [products, setProducts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(12);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [sortOption, setSortOption] = useState('featured');
-  
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   // Get category from URL params
   const categoryParam = searchParams.get('category');
-  
-  // Enhanced animation variants
+
+  // Animation variants
   const fadeInUp = {
     hidden: { opacity: 0, y: 30 },
     visible: { 
@@ -83,47 +89,53 @@ const ShopPage = () => {
     }
   };
 
-  // Filter products based on category and sort option
+  // Fetch products and categories
   useEffect(() => {
-    let result = [...products];
-    
-    // Apply category filter
-    const category = categoryParam || selectedCategory;
-    if (category && category !== 'all') {
-      result = result.filter(product => product.category === category);
-      setSelectedCategory(category);
-    } else {
-      setSelectedCategory('all');
-    }
-    
-    // Apply sorting
-    switch (sortOption) {
-      case 'price-low-high':
-        result.sort((a, b) => a.price - b.price);
-        break;
-      case 'price-high-low':
-        result.sort((a, b) => b.price - a.price);
-        break;
-      case 'newest':
-        // In a real app, you would sort by date
-        // Here we're just reversing the array as a placeholder
-        result.reverse();
-        break;
-      default:
-        // 'featured' - no sorting needed
-        break;
-    }
-    
-    setFilteredProducts(result);
-  }, [categoryParam, selectedCategory, sortOption]);
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // Fetch categories
+        const categoriesData = await ProductService.getCategories();
+        setCategories([{ slug: 'all', name: 'All Categories' }, ...categoriesData]);
+
+        // Fetch products
+        const params = {
+          page,
+          limit,
+          sort: sortOption,
+          category: categoryParam || (selectedCategory !== 'all' ? selectedCategory : undefined),
+        };
+        const { data, pagination } = await ProductService.getProducts(params);
+        setProducts(data.map(product => ({
+          id: product._id,
+          name: product.name,
+          price: product.price,
+          images: product.images,
+          category: product.category?.name || 'Uncategorized',
+          slug:product.slug,
+        })));
+        setTotalProducts(pagination.total);
+        setSelectedCategory(categoryParam || 'all');
+      } catch (err) {
+        setError('Failed to load products or categories. Please try again.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [page, sortOption, categoryParam, selectedCategory, limit]);
 
   // Handle category change
-  const handleCategoryChange = (categoryId) => {
-    setSelectedCategory(categoryId);
-    if (categoryId === 'all') {
+  const handleCategoryChange = (categorySlug) => {
+    setSelectedCategory(categorySlug);
+    setPage(1); // Reset to first page
+    if (categorySlug === 'all') {
       searchParams.delete('category');
     } else {
-      searchParams.set('category', categoryId);
+      searchParams.set('category', categorySlug);
     }
     setSearchParams(searchParams);
   };
@@ -131,12 +143,22 @@ const ShopPage = () => {
   // Handle sort change
   const handleSortChange = (e) => {
     setSortOption(e.target.value);
+    setPage(1); // Reset to first page
+  };
+
+  // Handle page change
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // Toggle filter visibility on mobile
   const toggleFilter = () => {
     setIsFilterOpen(!isFilterOpen);
   };
+
+  // Calculate total pages
+  const totalPages = Math.ceil(totalProducts / limit);
 
   return (
     <div className="bg-white min-h-screen">
@@ -180,11 +202,11 @@ const ShopPage = () => {
                 <h2 className="font-heading text-2xl mb-8 text-neutral-900 tracking-tight">Categories</h2>
                 <ul className="space-y-2">
                   {categories.map((category) => (
-                    <li key={category.id}>
+                    <li key={category.slug}>
                       <button
-                        onClick={() => handleCategoryChange(category.id)}
+                        onClick={() => handleCategoryChange(category.slug)}
                         className={`text-left w-full py-3 px-4 rounded-full transition-all duration-300 text-sm font-medium ${
-                          selectedCategory === category.id 
+                          selectedCategory === category.slug 
                             ? 'bg-neutral-900 text-white' 
                             : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
                         }`}
@@ -229,10 +251,10 @@ const ShopPage = () => {
                     <div className="grid grid-cols-2 gap-2">
                       {categories.map((category) => (
                         <button
-                          key={category.id}
-                          onClick={() => handleCategoryChange(category.id)}
+                          key={category.slug}
+                          onClick={() => handleCategoryChange(category.slug)}
                           className={`text-left py-3 px-4 text-sm transition-all duration-300 rounded-full font-medium ${
-                            selectedCategory === category.id 
+                            selectedCategory === category.slug 
                               ? 'bg-neutral-900 text-white' 
                               : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'
                           }`}
@@ -272,11 +294,11 @@ const ShopPage = () => {
             >
               <div className="flex items-center space-x-4">
                 <p className="text-neutral-600 font-medium">
-                  Showing {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'}
+                  Showing {products.length} of {totalProducts} {totalProducts === 1 ? 'product' : 'products'}
                 </p>
                 {selectedCategory !== 'all' && (
                   <div className="inline-flex items-center px-3 py-1 bg-neutral-100 rounded-full text-sm text-neutral-700">
-                    {categories.find(cat => cat.id === selectedCategory)?.name}
+                    {categories.find(cat => cat.slug === selectedCategory)?.name || 'Category'}
                   </div>
                 )}
               </div>
@@ -298,14 +320,56 @@ const ShopPage = () => {
             </motion.div>
 
             {/* Products Grid */}
-            {filteredProducts.length > 0 ? (
+            {isLoading ? (
               <motion.div
                 initial="hidden"
                 animate="visible"
                 variants={staggerContainer}
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10"
               >
-                {filteredProducts.map((product) => (
+                {[...Array(limit)].map((_, index) => (
+                  <motion.div key={index} variants={scaleIn}>
+                    <div className="animate-pulse">
+                      <div className="aspect-square bg-neutral-200 rounded-lg mb-4"></div>
+                      <div className="h-4 bg-neutral-200 rounded w-3/4 mb-2"></div>
+                      <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            ) : error ? (
+              <motion.div 
+                initial="hidden"
+                animate="visible"
+                variants={fadeInUp}
+                className="text-center py-20"
+              >
+                <div className="max-w-md mx-auto">
+                  <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Grid3X3 className="w-8 h-8 text-neutral-400" />
+                  </div>
+                  
+                  <h3 className="font-heading text-2xl text-neutral-900 mb-4">Error Loading Products</h3>
+                  <p className="text-neutral-600 mb-8 leading-relaxed">
+                    {error}
+                  </p>
+                  
+                  <Button 
+                    onClick={() => window.location.reload()} 
+                    className="bg-neutral-900 hover:bg-neutral-800 text-white px-8 py-3 rounded-full transition-all duration-300"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              </motion.div>
+            ) : products.length > 0 ? (
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={staggerContainer}
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10"
+              >
+                {products.map((product) => (
                   <motion.div key={product.id} variants={scaleIn}>
                     <ProductCard product={product} />
                   </motion.div>
@@ -335,6 +399,49 @@ const ShopPage = () => {
                     View All Products
                   </Button>
                 </div>
+              </motion.div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <motion.div
+                initial="hidden"
+                animate="visible"
+                variants={fadeIn}
+                className="flex justify-center items-center mt-12 space-x-2"
+              >
+                <Button
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => handlePageChange(page - 1)}
+                  className="px-4 py-2 rounded-full border-neutral-300 hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  Previous
+                </Button>
+                <div className="flex space-x-1">
+                  {[...Array(totalPages)].map((_, index) => (
+                    <Button
+                      key={index}
+                      variant={page === index + 1 ? 'default' : 'outline'}
+                      onClick={() => handlePageChange(index + 1)}
+                      className={`px-4 py-2 rounded-full ${
+                        page === index + 1 
+                          ? 'bg-neutral-900 text-white hover:bg-neutral-800' 
+                          : 'border-neutral-300 hover:bg-neutral-50'
+                      }`}
+                    >
+                      {index + 1}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  disabled={page === totalPages}
+                  onClick={() => handlePageChange(page + 1)}
+                  className="px-4 py-2 rounded-full border-neutral-300 hover:bg-neutral-50 disabled:opacity-50"
+                >
+                  Next
+                </Button>
               </motion.div>
             )}
           </div>

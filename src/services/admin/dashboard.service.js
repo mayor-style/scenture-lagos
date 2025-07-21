@@ -4,151 +4,69 @@ import api from '../api';
 const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
+// Helper to handle the caching logic cleanly
+const getOrFetch = async (key, fetcher) => {
+  const cached = cache.get(key);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data;
+  }
+  try {
+    const response = await fetcher();
+    const data = response.data?.data; // The data is nested under response.data.data
+    if (!data) throw new Error('Invalid data structure from API');
+    
+    cache.set(key, { data, timestamp: Date.now() });
+    return data;
+  } catch (error) {
+    console.error(`Error fetching data for key [${key}]:`, error);
+    // On error, we re-throw to let the UI component handle it.
+    // This gives you more control to display specific error messages.
+    throw error;
+  }
+};
+
 const DashboardService = {
+  /**
+   * Fetches the main dashboard summary, including metrics and chart data.
+   * @param {object} params - Optional query parameters, e.g., { startDate, endDate }.
+   */
   getDashboardSummary: async (params = {}) => {
     const cacheKey = `summary_${JSON.stringify(params)}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get('/admin/dashboard/summary', { params });
-      const data = response.data || {};
-      const result = {
-        data: {
-          metrics: {
-            totalSales: data.metrics?.totalSales || 0,
-            totalOrders: data.metrics?.totalOrders || 0,
-            inventoryValue: data.metrics?.inventoryValue || 0,
-            newCustomers: data.metrics?.newCustomers || 0,
-            salesGrowth: data.metrics?.salesGrowth || 0,
-            ordersGrowth: data.metrics?.ordersGrowth || 0,
-            customersGrowth: data.metrics?.customersGrowth || 0,
-            lowStockProducts: data.metrics?.lowStockProducts || 0,
-          },
-          charts: data.charts || { salesChart: [], orderStatusChart: [] },
-          dateRange: data.dateRange || {},
-        },
-      };
-      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching dashboard summary: ${error.message}`);
-      const defaultData = {
-        data: {
-          metrics: {
-            totalSales: 0,
-            totalOrders: 0,
-            inventoryValue: 0,
-            newCustomers: 0,
-            salesGrowth: 0,
-            ordersGrowth: 0,
-            customersGrowth: 0,
-            lowStockProducts: 0,
-          },
-          charts: { salesChart: [], orderStatusChart: [] },
-          dateRange: {},
-        },
-      };
-      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
-      return defaultData;
-    }
+    return getOrFetch(cacheKey, () => api.get('/admin/dashboard/summary', { params }));
   },
 
+  /**
+   * Fetches a list of the most recent orders.
+   * @param {object} params - Optional query parameters, e.g., { limit: 5 }.
+   */
   getRecentOrders: async (params = { limit: 5 }) => {
     const cacheKey = `recent-orders_${JSON.stringify(params)}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get('/admin/dashboard/recent-orders', { params });
-      const data = response.data || {};
-      const result = { data: { orders: data.orders || [] } };
-      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching recent orders: ${error.message}`);
-      const defaultData = { data: { orders: [] } };
-      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
-      return defaultData;
-    }
+    return getOrFetch(cacheKey, () => api.get('/admin/dashboard/recent-orders', { params }));
   },
 
+  /**
+   * Fetches the unified activity feed.
+   * @param {object} params - Optional query parameters, e.g., { limit: 10 }.
+   */
   getActivityFeed: async (params = { limit: 10 }) => {
     const cacheKey = `activity-feed_${JSON.stringify(params)}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get('/admin/dashboard/activity-feed', { params });
-      const data = response.data || {};
-      const result = { data: { activities: data.activities || [] } };
-      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching activity feed: ${error.message}`);
-      const defaultData = { data: { activities: [] } };
-      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
-      return defaultData;
-    }
+    return getOrFetch(cacheKey, () => api.get('/admin/dashboard/activity-feed', { params }));
   },
 
-  getSalesData: async (params = { period: 'week' }) => {
-    const cacheKey = `sales-data_${JSON.stringify(params)}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get('/admin/dashboard/sales-data', { params });
-      const salesChart = response.data?.salesChart || [];
-      const formattedData = salesChart.map((item) => {
-        const date = new Date(item.date);
-        if (!item.date || isNaN(date.getTime())) {
-          return { name: 'Unknown', sales: 0 };
-        }
-        let displayName;
-        switch (params.period) {
-          case 'week':
-            displayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-            break;
-          case 'month':
-            displayName = date.toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
-            break;
-          case 'year':
-            displayName = date.toLocaleDateString('en-US', { month: 'short' });
-            break;
-          default:
-            displayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-        }
-        return { name: displayName, sales: item.sales || 0 };
-      });
-      const result = { data: formattedData };
-      cache.set(cacheKey, { data: result.data, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching sales data: ${error.message}`);
-      const defaultData = { data: [] };
-      cache.set(cacheKey, { data: defaultData.data, timestamp: Date.now() });
-      return defaultData;
-    }
+  /**
+   * Retrieves data directly from the cache if available and not expired.
+   * @param {string} cacheKey - The key to look up in the cache.
+   */
+  getCachedData: (key) => {
+    const cached = cache.get(key);
+    return (cached && Date.now() - cached.timestamp < CACHE_TTL) ? cached.data : null;
   },
 
-  getCachedData: (cacheKey) => {
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-    return null;
-  },
-
+  /**
+   * Clears the entire cache. Useful for manual refreshes.
+   */
   clearCache: () => {
+    console.log('Dashboard cache cleared.');
     cache.clear();
   },
 };

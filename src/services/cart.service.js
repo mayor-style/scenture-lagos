@@ -9,8 +9,14 @@ const CartService = {
    * @returns {Promise<Object>} Cart data
    */
   getCart: async () => {
-    const response = await api.get('/cart');
-    return response.data;
+    try {
+      const response = await api.get('/cart');
+      console.log('getting', response.data.data)
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+      throw error;
+    }
   },
 
   /**
@@ -22,9 +28,13 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart
    */
   addToCart: async (cartItem) => {
-    const response = await api.post('/cart', cartItem);
-    console.log('fgghj')
-    return response.data;
+    try {
+      const response = await api.post('/cart', cartItem);
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      throw error;
+    }
   },
 
   /**
@@ -35,8 +45,13 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart
    */
   updateCartItem: async (itemId, updateData) => {
-    const response = await api.put(`/cart/${itemId}`, updateData);
-    return response.data;
+    try {
+      const response = await api.put(`/cart/${itemId}`, updateData);
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error updating cart item:', error);
+      throw error;
+    }
   },
 
   /**
@@ -45,8 +60,13 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart
    */
   removeFromCart: async (itemId) => {
-    const response = await api.delete(`/cart/${itemId}`);
-    return response.data;
+    try {
+      const response = await api.delete(`/cart/${itemId}`);
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error removing from cart:', error);
+      throw error;
+    }
   },
 
   /**
@@ -54,8 +74,13 @@ const CartService = {
    * @returns {Promise<Object>} Empty cart
    */
   clearCart: async () => {
-    const response = await api.delete('/cart');
-    return response.data;
+    try {
+      const response = await api.delete('/cart');
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error clearing cart:', error);
+      throw error;
+    }
   },
 
   /**
@@ -65,8 +90,13 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart with applied coupon
    */
   applyCoupon: async (couponData) => {
-    const response = await api.post('/cart/coupon', couponData);
-    return response.data;
+    try {
+      const response = await api.post('/cart/coupon', couponData);
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error applying coupon:', error);
+      throw error;
+    }
   },
 
   /**
@@ -74,38 +104,14 @@ const CartService = {
    * @returns {Promise<Object>} Updated cart without coupon
    */
   removeCoupon: async () => {
-    const response = await api.delete('/cart/coupon');
-    return response.data;
+    try {
+      const response = await api.delete('/cart/coupon');
+      return response.data.data.cart;
+    } catch (error) {
+      console.error('Error removing coupon:', error);
+      throw error;
+    }
   },
-
-  /**
-   * Get cart summary (totals, discounts, etc.)
-   * @returns {Promise<Object>} Cart summary
-   */
-  getCartSummary: async () => {
-    const response = await api.get('/cart/summary');
-    return response.data;
-  },
-
-  /**
-   * Get shipping methods available for the current cart
-   * @returns {Promise<Object>} Available shipping methods
-   */
-  getShippingMethods: async () => {
-    const response = await api.get('/cart/shipping-methods');
-    return response.data;
-  },
-
-  /**
-   * Set shipping method for the cart
-   * @param {Object} shippingData - Shipping data
-   * @param {string} shippingData.methodId - Shipping method ID
-   * @returns {Promise<Object>} Updated cart with shipping method
-   */
-  setShippingMethod: async (shippingData) => {
-    const response = await api.post('/cart/shipping-method', shippingData);
-    return response.data;
-  }
 };
 
 export default CartService;

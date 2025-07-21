@@ -21,6 +21,10 @@ module.exports = {
         },
         cream: '#F5F5F0',
         background: '#FAF7F2',
+        muted: {
+          DEFAULT: 'hsl(210, 40%, 96.1%)', // Light gray for bg-muted
+          foreground: 'hsl(215, 20%, 65%)', // Complementary muted foreground
+        },
       },
       fontFamily: {
         heading: ['Playfair Display', 'serif'],

@@ -1,29 +1,35 @@
 import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 import { ArrowLeft, UserPlus, AlertCircle } from 'lucide-react';
 import CustomerService from '../../services/admin/customer.service';
-import { LoadingState } from '../../components/ui/LoadingState';
-import { useToast } from '../../components/ui/Toast'; // Replaced react-hot-toast with custom toast
+import { LoadingOverlay } from '../../components/ui/LoadingState';
+import { useToast } from '../../components/ui/Toast';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
+};
 
 const AddCustomerPage = () => {
   const navigate = useNavigate();
-  const { addToast } = useToast(); // Use custom toast hook
+  const { addToast } = useToast();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
     password: '',
-    address: {
-      street: '',
-      city: '',
-      state: '',
-      postalCode: '',
-      country: 'Nigeria',
-    },
+    address: { street: '', city: '', state: '', postalCode: '', country: 'Nigeria' },
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
@@ -64,209 +70,257 @@ const AddCustomerPage = () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
-      addToast('Please fix the errors in the form', 'error'); // Updated to use custom toast
+      addToast('Please fix the errors in the form', 'error');
       return;
     }
-
     setLoading(true);
     try {
       await CustomerService.createCustomer(formData);
-      addToast('Customer created successfully', 'success'); // Updated to use custom toast
+      addToast('Customer created successfully', 'success');
       navigate('/admin/customers');
     } catch (err) {
       setLoading(false);
-      const errorMessage = err.toString() || 'Failed to create customer';
+      const errorMessage = err.response?.data?.message || 'Failed to create customer';
       setErrors({ form: errorMessage });
-      addToast(errorMessage, 'error'); // Updated to use custom toast
+      addToast(errorMessage, 'error');
     }
   };
 
   return (
     <>
       <Helmet>
-        <title>Add Customer | Scenture Lagos Admin</title>
+        <title>Add Customer | Scenture Admin</title>
       </Helmet>
-
-      <div className="space-y-6 px-0">
-        <div className="flex items-center px-4 sm:px-6">
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="visible"
+        className="container mx-auto space-y-6 py-6 sm:py-8 px-4 sm:px-6 max-w-4xl"
+      >
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex items-center"
+        >
           <Link to="/admin/customers" className="mr-4">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft size={20} />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hover:bg-primary/10"
+              aria-label="Back to customers"
+            >
+              <ArrowLeft className="h-5 w-5 text-secondary" />
             </Button>
           </Link>
           <div>
-            <h1 className="dashboardHeading">Add New Customer</h1>
-            <p className="dashboardSubHeading">Create a new customer profile</p>
+            <h1 className="text-2xl sm:text-3xl font-heading font-medium text-secondary tracking-tight">
+              Add New Customer
+            </h1>
+            <p className="text-sm text-muted-foreground">Create a new customer profile</p>
           </div>
-        </div>
+        </motion.header>
 
-        {loading && <LoadingState fullPage={false} className="py-12 px-4 sm:px-6" />}
-
-        <Card className="mx-0">
-          <CardHeader className="px-4 sm:px-6">
-            <CardTitle>Customer Details</CardTitle>
-            <CardDescription>Enter the customer’s information below</CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 sm:px-6">
-            {errors.form && (
-              <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-md flex items-center">
-                <AlertCircle size={16} className="mr-2" />
-                {errors.form}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-secondary">First Name</label>
-                  <input
-                    type="text"
-                    name="firstName"
-                    value={formData.firstName}
-                    onChange={handleInputChange}
-                    className={`mt-1 w-full px-4 py-2 border ${
-                      errors.firstName ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
-                    placeholder="Enter first name"
-                  />
-                  {errors.firstName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.firstName}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-secondary">Last Name</label>
-                  <input
-                    type="text"
-                    name="lastName"
-                    value={formData.lastName}
-                    onChange={handleInputChange}
-                    className={`mt-1 w-full px-4 py-2 border ${
-                      errors.lastName ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
-                    placeholder="Enter last name"
-                  />
-                  {errors.lastName && (
-                    <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-secondary">Email</label>
-                  <input
-                    type="email"
-                    name="email"
-                    value={formData.email}
-                    onChange={handleInputChange}
-                    className={`mt-1 w-full px-4 py-2 border ${
-                      errors.email ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
-                    placeholder="Enter email"
-                  />
-                  {errors.email && (
-                    <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-secondary">Phone</label>
-                  <input
-                    type="text"
-                    name="phone"
-                    value={formData.phone}
-                    onChange={handleInputChange}
-                    className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                    placeholder="Enter phone number (optional)"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-secondary">Password</label>
-                  <input
-                    type="password"
-                    name="password"
-                    value={formData.password}
-                    onChange={handleInputChange}
-                    className={`mt-1 w-full px-4 py-2 border ${
-                      errors.password ? 'border-red-300' : 'border-slate-200'
-                    } rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50`}
-                    placeholder="Enter password"
-                  />
-                  {errors.password && (
-                    <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-                  )}
-                </div>
-              </div>
-              <div>
-                <h3 className="text-lg font-medium text-secondary mb-2">Address</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-secondary">Street</label>
-                    <input
-                      type="text"
-                      name="address.street"
-                      value={formData.address.street}
-                      onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      placeholder="Enter street (optional)"
-                    />
+        <motion.div variants={cardVariants}>
+          <Card className="border-primary/20 bg-background shadow-sm">
+            <CardHeader className="px-4 sm:px-6">
+              <CardTitle className="text-lg font-heading text-secondary">Customer Details</CardTitle>
+              <CardDescription className="text-sm text-muted-foreground">
+                Enter the customer’s information below
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 sm:px-6">
+              <LoadingOverlay loading={loading}>
+                {errors.form && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mb-4 p-4 bg-destructive/20 text-destructive rounded-md flex items-center"
+                  >
+                    <AlertCircle className="mr-2 h-4 w-4" />
+                    {errors.form}
+                  </motion.div>
+                )}
+                <form onSubmit={handleSubmit} className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-1.5">
+                        First Name
+                      </label>
+                      <Input
+                        type="text"
+                        name="firstName"
+                        value={formData.firstName}
+                        onChange={handleInputChange}
+                        placeholder="Enter first name"
+                        className={errors.firstName ? 'border-destructive' : ''}
+                        aria-label="First name"
+                      />
+                      {errors.firstName && (
+                        <p className="mt-1 text-sm text-destructive">{errors.firstName}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-1.5">
+                        Last Name
+                      </label>
+                      <Input
+                        type="text"
+                        name="lastName"
+                        value={formData.lastName}
+                        onChange={handleInputChange}
+                        placeholder="Enter last name"
+                        className={errors.lastName ? 'border-destructive' : ''}
+                        aria-label="Last name"
+                      />
+                      {errors.lastName && (
+                        <p className="mt-1 text-sm text-destructive">{errors.lastName}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-1.5">
+                        Email
+                      </label>
+                      <Input
+                        type="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleInputChange}
+                        placeholder="Enter email"
+                        className={errors.email ? 'border-destructive' : ''}
+                        aria-label="Email"
+                      />
+                      {errors.email && (
+                        <p className="mt-1 text-sm text-destructive">{errors.email}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-1.5">
+                        Phone
+                      </label>
+                      <Input
+                        type="text"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        placeholder="Enter phone number (optional)"
+                        aria-label="Phone number"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-secondary mb-1.5">
+                        Password
+                      </label>
+                      <Input
+                        type="password"
+                        name="password"
+                        value={formData.password}
+                        onChange={handleInputChange}
+                        placeholder="Enter password"
+                        className={errors.password ? 'border-destructive' : ''}
+                        aria-label="Password"
+                      />
+                      {errors.password && (
+                        <p className="mt-1 text-sm text-destructive">{errors.password}</p>
+                      )}
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-secondary">City</label>
-                    <input
-                      type="text"
-                      name="address.city"
-                      value={formData.address.city}
-                      onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      placeholder="Enter city (optional)"
-                    />
+                    <h3 className="text-lg font-heading text-secondary mb-2">Address</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                          Street
+                        </label>
+                        <Input
+                          type="text"
+                          name="address.street"
+                          value={formData.address.street}
+                          onChange={handleInputChange}
+                          placeholder="Enter street (optional)"
+                          aria-label="Street address"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                          City
+                        </label>
+                        <Input
+                          type="text"
+                          name="address.city"
+                          value={formData.address.city}
+                          onChange={handleInputChange}
+                          placeholder="Enter city (optional)"
+                          aria-label="City"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                          State
+                        </label>
+                        <Input
+                          type="text"
+                          name="address.state"
+                          value={formData.address.state}
+                          onChange={handleInputChange}
+                          placeholder="Enter state (optional)"
+                          aria-label="State"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                          Postal Code
+                        </label>
+                        <Input
+                          type="text"
+                          name="address.postalCode"
+                          value={formData.address.postalCode}
+                          onChange={handleInputChange}
+                          placeholder="Enter postal code (optional)"
+                          aria-label="Postal code"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                          Country
+                        </label>
+                        <Input
+                          type="text"
+                          name="address.country"
+                          value={formData.address.country}
+                          onChange={handleInputChange}
+                          placeholder="Enter country"
+                          aria-label="Country"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-secondary">State</label>
-                    <input
-                      type="text"
-                      name="address.state"
-                      value={formData.address.state}
-                      onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      placeholder="Enter state (optional)"
-                    />
+                  <div className="flex flex-col sm:flex-row justify-end gap-3">
+                    <Link to="/admin/customers">
+                      <Button
+                        variant="outline"
+                        className="w-full sm:w-auto hover:bg-primary/10"
+                        aria-label="Cancel"
+                      >
+                        Cancel
+                      </Button>
+                    </Link>
+                    <Button
+                      type="submit"
+                      disabled={loading}
+                      className="w-full sm:w-auto bg-primary hover:bg-primary-dark text-secondary"
+                      aria-label="Create customer"
+                    >
+                      <UserPlus className="mr-2 h-4 w-4" />
+                      Create Customer
+                    </Button>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-secondary">Postal Code</label>
-                    <input
-                      type="text"
-                      name="address.postalCode"
-                      value={formData.address.postalCode}
-                      onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      placeholder="Enter postal code (optional)"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-secondary">Country</label>
-                    <input
-                      type="text"
-                      name="address.country"
-                      value={formData.address.country}
-                      onChange={handleInputChange}
-                      className="mt-1 w-full px-4 py-2 border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      placeholder="Enter country"
-                    />
-                  </div>
-                </div>
-              </div>
-              <div className="flex flex-col sm:flex-row justify-end space-x-0 sm:space-x-3 gap-3">
-                <Link to="/admin/customers">
-                  <Button variant="outline" className="w-full sm:w-auto">
-                    Cancel
-                  </Button>
-                </Link>
-                <Button type="submit" disabled={loading} className="w-full sm:w-auto">
-                  <UserPlus size={16} className="mr-2" />
-                  Create Customer
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
+                </form>
+              </LoadingOverlay>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </motion.div>
     </>
   );
 };

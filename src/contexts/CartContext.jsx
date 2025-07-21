@@ -1,14 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import CartService from '../services/cart.service';
 import { useAuth } from './AuthContext';
-import { useToast } from '../components/ui/Toast'; // Import custom toast
+import { useToast } from '../components/ui/Toast';
 
 const CartContext = createContext();
 
 export const useCart = () => useContext(CartContext);
 
 export const CartProvider = ({ children }) => {
-  const { addToast } = useToast(); // Initialize custom toast
+  const { addToast } = useToast();
   const { isAuthenticated } = useAuth();
   const [cart, setCart] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -17,34 +17,27 @@ export const CartProvider = ({ children }) => {
   const initializeCart = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
     try {
       if (isAuthenticated) {
         const cartData = await CartService.getCart();
-        setCart(cartData);
+        setCart(cartData || { items: [], totalItems: 0, subtotal: 0, discount: 0, total: 0, coupon: null });
       } else {
         const localCart = localStorage.getItem('cart');
         if (localCart) {
           setCart(JSON.parse(localCart));
         } else {
-          setCart({
-            items: [],
-            totalItems: 0,
-            subtotal: 0,
-            discount: 0,
-            total: 0,
-            coupon: null
-          });
+          const cartData = await CartService.getCart(); // Fetch guest cart from session
+          setCart(cartData || { items: [], totalItems: 0, subtotal: 0, discount: 0, total: 0, coupon: null });
         }
       }
     } catch (err) {
       console.error('Error initializing cart:', err);
-      setError('Failed to load cart. Please try again.');
+      setError(err.response?.data?.message || 'Failed to load cart. Please try again.');
       addToast('Failed to load cart', 'error');
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, addToast]);
 
   const saveCartToLocalStorage = useCallback(() => {
     if (!isAuthenticated && cart) {
@@ -63,62 +56,23 @@ export const CartProvider = ({ children }) => {
   const addToCart = async (product, quantity = 1, variantId = null) => {
     setLoading(true);
     setError(null);
-    
     try {
-      if (isAuthenticated) {
-        const cartData = await CartService.addToCart({
-          productId: product.id,
-          quantity,
-          variantId
-        });
-        setCart(cartData);
-      } else {
-        const cartItem = {
-          id: `${product.id}${variantId ? `-${variantId}` : ''}`,
-          product: {
-            id: product.id,
-            name: product.name,
-            price: product.price,
-            image: product.image || (product.images && product.images.length > 0 ? product.images[0] : null),
-            category: product.category || 'Unknown',
-          },
-          quantity,
-          variantId,
-          price: product.price,
-          subtotal: product.price * quantity
-        };
-
-        const existingItemIndex = cart.items.findIndex(
-          item => item.product.id === product.id && item.variantId === variantId
-        );
-
-        let updatedItems;
-        if (existingItemIndex >= 0) {
-          updatedItems = [...cart.items];
-          updatedItems[existingItemIndex].quantity += quantity;
-          updatedItems[existingItemIndex].subtotal = 
-            updatedItems[existingItemIndex].price * updatedItems[existingItemIndex].quantity;
-        } else {
-          updatedItems = [...cart.items, cartItem];
-        }
-
-        const totalItems = updatedItems.reduce((sum, item) => sum + item.quantity, 0);
-        const subtotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
-        const total = subtotal - (cart.discount || 0);
-
-        setCart({
-          ...cart,
-          items: updatedItems,
-          totalItems,
-          subtotal,
-          total
-        });
+      const updatedCart = await CartService.addToCart({
+        productId: product.id,
+        quantity,
+        variantId,
+      });
+      setCart(updatedCart);
+      if (!isAuthenticated) {
+        localStorage.setItem('cart', JSON.stringify(updatedCart));
       }
-      addToast('Item added to cart', 'success');
+      await initializeCart(); // Ensure latest state
+      console.log('added', product)
+      addToast(`${product.name} added to cart`, 'success');
     } catch (err) {
       console.error('Error adding to cart:', err);
-      setError('Failed to add item to cart. Please try again.');
-      addToast('Failed to add item to cart', 'error');
+      setError(err.response?.data?.message || 'Failed to add item to cart. Please try again.');
+      addToast(err.response?.data?.message || 'Failed to add item to cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -128,43 +82,20 @@ export const CartProvider = ({ children }) => {
     if (quantity < 1) {
       return removeFromCart(itemId);
     }
-
     setLoading(true);
     setError(null);
-    
     try {
-      if (isAuthenticated) {
-        const cartData = await CartService.updateCartItem(itemId, { quantity });
-        setCart(cartData);
-      } else {
-        const updatedItems = cart.items.map(item => {
-          if (item.id === itemId) {
-            return {
-              ...item,
-              quantity,
-              subtotal: item.price * quantity
-            };
-          }
-          return item;
-        });
-
-        const totalItems = updatedItems.reduce((sum, item) => sum + item.quantity, 0);
-        const subtotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
-        const total = subtotal - (cart.discount || 0);
-
-        setCart({
-          ...cart,
-          items: updatedItems,
-          totalItems,
-          subtotal,
-          total
-        });
+      const updatedCart = await CartService.updateCartItem(itemId, { quantity });
+      setCart(updatedCart);
+      if (!isAuthenticated) {
+        localStorage.setItem('cart', JSON.stringify(updatedCart));
       }
+      await initializeCart();
       addToast('Cart updated successfully', 'success');
     } catch (err) {
       console.error('Error updating cart item:', err);
-      setError('Failed to update cart. Please try again.');
-      addToast('Failed to update cart', 'error');
+      setError(err.response?.data?.message || 'Failed to update cart. Please try again.');
+      addToast(err.response?.data?.message || 'Failed to update cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -173,32 +104,18 @@ export const CartProvider = ({ children }) => {
   const removeFromCart = async (itemId) => {
     setLoading(true);
     setError(null);
-    
     try {
-      if (isAuthenticated) {
-        const cartData = await CartService.removeFromCart(itemId);
-        setCart(cartData);
-      } else {
-        const updatedItems = cart.items.filter(item => item.id !== itemId);
-
-        const totalItems = updatedItems.reduce((sum, item) => sum + item.quantity, 0);
-        const subtotal = updatedItems.reduce((sum, item) => sum + item.subtotal, 0);
-        const total = subtotal - (cart.discount || 0);
-
-        setCart({
-          ...cart,
-          items: updatedItems,
-          totalItems,
-          subtotal,
-          total
-        });
+      const updatedCart = await CartService.removeFromCart(itemId);
+      setCart(updatedCart);
+      if (!isAuthenticated) {
+        localStorage.setItem('cart', JSON.stringify(updatedCart));
       }
-      
+      await initializeCart();
       addToast('Item removed from cart', 'success');
     } catch (err) {
       console.error('Error removing from cart:', err);
-      setError('Failed to remove item from cart. Please try again.');
-      addToast('Failed to remove item from cart', 'error');
+      setError(err.response?.data?.message || 'Failed to remove item from cart. Please try again.');
+      addToast(err.response?.data?.message || 'Failed to remove item from cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -207,26 +124,18 @@ export const CartProvider = ({ children }) => {
   const clearCart = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      if (isAuthenticated) {
-        await CartService.clearCart();
+      const updatedCart = await CartService.clearCart();
+      setCart(updatedCart);
+      if (!isAuthenticated) {
+        localStorage.setItem('cart', JSON.stringify(updatedCart));
       }
-      
-      setCart({
-        items: [],
-        totalItems: 0,
-        subtotal: 0,
-        discount: 0,
-        total: 0,
-        coupon: null
-      });
-      
+      await initializeCart();
       addToast('Cart cleared', 'success');
     } catch (err) {
       console.error('Error clearing cart:', err);
-      setError('Failed to clear cart. Please try again.');
-      addToast('Failed to clear cart', 'error');
+      setError(err.response?.data?.message || 'Failed to clear cart. Please try again.');
+      addToast(err.response?.data?.message || 'Failed to clear cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -235,22 +144,20 @@ export const CartProvider = ({ children }) => {
   const applyCoupon = async (code) => {
     setLoading(true);
     setError(null);
-    
     try {
-      if (isAuthenticated) {
-        const cartData = await CartService.applyCoupon({ code });
-        setCart(cartData);
-      } else {
-        addToast('Coupon functionality requires login', 'error');
+      if (!isAuthenticated) {
         setError('Please log in to apply coupons');
+        addToast('Please log in to apply coupons', 'error');
         return;
       }
-      
+      const updatedCart = await CartService.applyCoupon({ code });
+      setCart(updatedCart);
+      await initializeCart();
       addToast('Coupon applied successfully', 'success');
     } catch (err) {
       console.error('Error applying coupon:', err);
-      setError('Failed to apply coupon. Please check the code and try again.');
-      addToast('Invalid coupon code', 'error');
+      setError(err.response?.data?.message || 'Failed to apply coupon. Please check the code and try again.');
+      addToast(err.response?.data?.message || 'Invalid coupon code', 'error');
     } finally {
       setLoading(false);
     }
@@ -259,25 +166,20 @@ export const CartProvider = ({ children }) => {
   const removeCoupon = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      if (isAuthenticated) {
-        const cartData = await CartService.removeCoupon();
-        setCart(cartData);
-      } else {
-        setCart({
-          ...cart,
-          coupon: null,
-          discount: 0,
-          total: cart.subtotal
-        });
+      if (!isAuthenticated) {
+        setError('Please log in to remove coupons');
+        addToast('Please log in to remove coupons', 'error');
+        return;
       }
-      
+      const updatedCart = await CartService.removeCoupon();
+      setCart(updatedCart);
+      await initializeCart();
       addToast('Coupon removed', 'success');
     } catch (err) {
       console.error('Error removing coupon:', err);
-      setError('Failed to remove coupon. Please try again.');
-      addToast('Failed to remove coupon', 'error');
+      setError(err.response?.data?.message || 'Failed to remove coupon. Please try again.');
+      addToast(err.response?.data?.message || 'Failed to remove coupon', 'error');
     } finally {
       setLoading(false);
     }
@@ -285,29 +187,23 @@ export const CartProvider = ({ children }) => {
 
   const mergeWithUserCart = async () => {
     if (!isAuthenticated || !cart || cart.items.length === 0) return;
-    
     setLoading(true);
     setError(null);
-    
     try {
       for (const item of cart.items) {
         await CartService.addToCart({
-          productId: item.product.id,
+          productId: item.product,
           quantity: item.quantity,
-          variantId: item.variantId
+          variantId: item.variant?._id || null,
         });
       }
-      
-      const cartData = await CartService.getCart();
-      setCart(cartData);
-      
+      await initializeCart();
       localStorage.removeItem('cart');
-      
       addToast('Cart updated with your items', 'success');
     } catch (err) {
       console.error('Error merging carts:', err);
-      setError('Failed to update your cart. Please try again.');
-      addToast('Failed to update cart', 'error');
+      setError(err.response?.data?.message || 'Failed to update your cart. Please try again.');
+      addToast(err.response?.data?.message || 'Failed to update cart', 'error');
     } finally {
       setLoading(false);
     }
@@ -324,7 +220,7 @@ export const CartProvider = ({ children }) => {
     applyCoupon,
     removeCoupon,
     mergeWithUserCart,
-    initializeCart
+    initializeCart,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

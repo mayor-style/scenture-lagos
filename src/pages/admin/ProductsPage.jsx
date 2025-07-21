@@ -1,15 +1,30 @@
-// src/pages/admin/ProductsPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Search, Filter, Edit, Trash2, Eye, ChevronLeft, ChevronRight, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/Select';
 import { formatPrice } from '../../lib/utils';
-import { Plus, Search, Filter, Edit, Trash2, Eye, ChevronLeft, ChevronRight, RefreshCw, AlertCircle, Loader2 } from 'lucide-react';
 import ProductService from '../../services/admin/product.service';
 import { LoadingOverlay } from '../../components/ui/LoadingState';
 import { useToast } from '../../components/ui/Toast';
 import { useRefresh } from '../../contexts/RefreshContext';
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { y: 20, opacity: 0 },
+  visible: { y: 0, opacity: 1, transition: { duration: 0.3 } },
+};
 
 const ProductsPage = () => {
   const navigate = useNavigate();
@@ -19,8 +34,8 @@ const ProductsPage = () => {
 
   const queryParams = new URLSearchParams(location.search);
   const initialPage = parseInt(queryParams.get('page')) || 1;
-  const initialCategory = queryParams.get('category') || '';
-  const initialStatus = queryParams.get('status') || '';
+  const initialCategory = queryParams.get('category') || 'all';
+  const initialStatus = queryParams.get('status') || 'all';
   const initialSearch = queryParams.get('search') || '';
 
   const [products, setProducts] = useState([]);
@@ -38,51 +53,46 @@ const ProductsPage = () => {
   useEffect(() => {
     const params = new URLSearchParams();
     if (currentPage > 1) params.set('page', currentPage);
-    if (selectedCategory) params.set('category', selectedCategory);
-    if (selectedStatus) params.set('status', selectedStatus);
+    if (selectedCategory && selectedCategory !== 'all') params.set('category', selectedCategory);
+    if (selectedStatus && selectedStatus !== 'all') params.set('status', selectedStatus);
     if (searchTerm) params.set('search', searchTerm);
-    const newUrl = `${location.pathname}?${params.toString()}`;
-    navigate(newUrl, { replace: true });
+    navigate(`${location.pathname}?${params.toString()}`, { replace: true });
   }, [currentPage, selectedCategory, selectedStatus, searchTerm, navigate, location.pathname]);
 
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
-
     try {
       const params = {
         page: currentPage,
         limit: itemsPerPage,
         search: searchTerm,
       };
-      if (selectedCategory) params.category = selectedCategory;
-      if (selectedStatus) {
+      if (selectedCategory && selectedCategory !== 'all') params.category = selectedCategory;
+      if (selectedStatus && selectedStatus !== 'all') {
         if (selectedStatus === 'Out of Stock') params.stock = 'out_of_stock';
         else if (selectedStatus === 'Low Stock') params.stock = 'low_stock';
-        else if (selectedStatus === 'Active') params.status = 'published';
+        else if (selectedStatus === 'Active') params.stock = 'published';
       }
 
       const { data, total } = await ProductService.getAllProducts(params);
       setProducts(data);
       setTotalProducts(total || data.length);
-      console.log(data, 'total', total)
 
       const categoriesResponse = await ProductService.getAllCategories();
       setCategories(categoriesResponse.data);
-      console.log('catRes', categoriesResponse.data)
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to load products');
       addToast('Failed to load products', 'error');
       setProducts([]);
       setCategories([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [currentPage, itemsPerPage, searchTerm, selectedCategory, selectedStatus, addToast]);
 
   const handleDeleteProduct = async (productId) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) {
-      return;
-    }
+    if (!window.confirm('Are you sure you want to delete this product?')) return;
 
     setDeleteLoading(productId);
     try {
@@ -92,7 +102,7 @@ const ProductsPage = () => {
       setNeedsRefresh(true);
       await fetchProducts();
     } catch (err) {
-      addToast(err.message, 'error');
+      addToast(err.message || 'Failed to delete product', 'error');
     } finally {
       setDeleteLoading(null);
     }
@@ -105,11 +115,11 @@ const ProductsPage = () => {
         limit: itemsPerPage,
         search: searchTerm,
       };
-      if (selectedCategory) params.category = selectedCategory;
-      if (selectedStatus) {
+      if (selectedCategory && selectedCategory !== 'all') params.category = selectedCategory;
+      if (selectedStatus && selectedStatus !== 'all') {
         if (selectedStatus === 'Out of Stock') params.stock = 'out_of_stock';
         else if (selectedStatus === 'Low Stock') params.stock = 'low_stock';
-        else if (selectedStatus === 'Active') params.status = 'published';
+        else if (selectedStatus === 'Active') params.stock = 'published';
       }
 
       const productsCached = ProductService.getCachedData(`products_${JSON.stringify(params)}`);
@@ -127,12 +137,13 @@ const ProductsPage = () => {
       }
     };
     checkCache();
-  }, [currentPage, selectedCategory, selectedStatus, searchTerm, needsRefresh]);
+  }, [currentPage, selectedCategory, selectedStatus, searchTerm, needsRefresh, fetchProducts]);
 
   const totalPages = Math.ceil(totalProducts / itemsPerPage);
 
   const handlePageChange = (pageNumber) => {
     setCurrentPage(pageNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const debounce = (func, delay) => {
@@ -151,320 +162,400 @@ const ProductsPage = () => {
   return (
     <>
       <Helmet>
-        <title>Products | Scenture Lagos Admin</title>
+        <title>Products | Scenture Admin</title>
       </Helmet>
-      <div className="space-y-8 px-0">
-        <div className="mb-8 lg:mb-12">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-6 lg:space-y-0">
-            <div className="space-y-2">
-              <h1 className="dashboardHeading">Products</h1>
-              <p className="dashboardSubHeading">Manage your product inventory with elegance</p>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-3 lg:gap-4">
-              <Button
-                variant="outline"
-                onClick={async () => {
-                  ProductService.clearCache();
-                  setNeedsRefresh(true);
-                  await fetchProducts();
-                  addToast('Products refreshed', 'success');
-                }}
-                disabled={loading}
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="mr-3 animate-spin" />
-                    Refreshing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={18} className="mr-3" />
-                    Refresh
-                  </>
-                )}
-              </Button>
-              <Link to="/admin/products/new">
-                <Button variant="default" className="bg-gradient-to-r from-slate-900 to-slate-800 text-white">
-                  <Plus size={18} className="mr-3" />
-                  Add New Product
-                </Button>
-              </Link>
-            </div>
+      <div className="container mx-auto space-y-6 py-6 sm:py-8 px-2 sm:px-4">
+        {/* Header */}
+        <motion.header
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        >
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-heading font-medium text-secondary tracking-tight">
+              Products
+            </h1>
+            <p className="text-sm text-muted-foreground mt-1.5">Curate your product collection with elegance</p>
           </div>
-        </div>
-
-        {loading && !error && (
-          <div className="flex items-center justify-center py-20">
-            <div className="text-center space-y-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-2 border-slate-300 border-t-slate-900 mx-auto"></div>
-              <p className="text-slate-600 font-light">Loading your products...</p>
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-white/60 backdrop-blur-sm border border-red-200/60 rounded-2xl p-8 text-center">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <AlertCircle size={24} className="text-red-600" />
-            </div>
-            <h3 className="text-xl font-medium text-slate-900 mb-2">Failed to load products</h3>
-            <p className="text-slate-600 mb-6">{error}</p>
+          <div className="flex flex-wrap gap-2">
             <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                ProductService.clearCache();
+                setNeedsRefresh(true);
+                await fetchProducts();
+                addToast('Products refreshed', 'success');
+              }}
+              disabled={loading}
+              className="group hover:bg-primary/10"
+            >
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''} group-hover:text-primary`} />
+              {loading ? 'Refreshing...' : 'Refresh'}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              asChild
+              className="group bg-primary hover:bg-primary-dark"
+            >
+              <Link to="/admin/products/new" className='flex'>
+                <Plus className="mr-2 h-4 w-4 group-hover:text-background" />
+                Add New Product
+              </Link>
+            </Button>
+          </div>
+        </motion.header>
+
+        {/* Error State */}
+        {error && !loading && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-background border border-primary/20 rounded-lg p-6 text-center shadow-sm"
+          >
+            <AlertCircle className="mx-auto h-10 w-10 text-destructive" />
+            <h3 className="text-lg font-semibold text-secondary mt-3">Failed to load products</h3>
+            <p className="text-sm text-muted-foreground mt-1">{error}</p>
+            <Button
+              variant="default"
+              size="sm"
               onClick={async () => {
                 ProductService.clearCache();
                 await fetchProducts();
               }}
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className="mt-4 bg-destructive hover:bg-destructive-dark"
             >
               Try Again
             </Button>
-          </div>
+          </motion.div>
         )}
 
-        <div className="bg-white/60 backdrop-blur-sm border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden">
-          <div className="border-b border-slate-200/60 bg-white/40 px-6 lg:px-8 py-6 lg:py-8">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-              <div>
-                <h2 className="text-2xl lg:text-3xl font-light text-slate-900">Product Collection</h2>
-                <p className="text-slate-600 mt-1 font-light">View and manage all products</p>
+        {/* Main Content */}
+        <Card className="border-primary/20 bg-background shadow-sm">
+          <CardHeader className="p-5 sm:p-6">
+            <CardTitle className="text-xl font-heading text-secondary">Product Collection</CardTitle>
+            <CardDescription className="text-sm text-muted-foreground mt-1">
+              Browse and manage your product inventory
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-5 sm:p-6">
+            {/* Filters and Search */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6"
+            >
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  type="text"
+                  placeholder="Search products..."
+                  defaultValue={searchTerm}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10 bg-background border-primary/20 focus:ring-primary/50 hover:shadow-sm"
+                  disabled={loading}
+                />
               </div>
-              <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:items-center min-w-0">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
-                  <input
-                    type="text"
-                    placeholder="Search products..."
-                    className="w-full pl-12 pr-4 py-3 bg-white/80 border border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                    defaultValue={searchTerm}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                  />
-                </div>
-                <div className="flex max-sm:flex-col gap-3 lg:gap-4">
-                  <div className="relative">
-                    <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
-                    <select
-                      className="pl-11 pr-8 py-3 bg-white/80 border max-sm:w-full border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                      value={selectedCategory}
-                      onChange={(e) => {
-                        setSelectedCategory(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <option value="">All Categories</option>
-                      {categories.map(category => (
-                        <option key={category.id} value={category.id}>{category.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="relative">
-                    <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400" size={16} />
-                    <select
-                      className="pl-11 pr-8 py-3 bg-white/80 border max-sm:w-full border-slate-200/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10"
-                      value={selectedStatus}
-                      onChange={(e) => {
-                        setSelectedStatus(e.target.value);
-                        setCurrentPage(1);
-                      }}
-                    >
-                      <option value="">All Status</option>
-                      <option value="Active">Active</option>
-                      <option value="Out of Stock">Out of Stock</option>
-                      <option value="Low Stock">Low Stock</option>
-                    </select>
-                  </div>
-                </div>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select
+                  value={selectedCategory}
+                  onValueChange={(value) => {
+                    setSelectedCategory(value);
+                    setCurrentPage(1);
+                  }}
+                  disabled={loading}
+                >
+                  <SelectTrigger className="w-full sm:w-40 bg-background border-primary/20 focus:ring-primary/50 hover:shadow-sm">
+                    <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder="All Categories" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={selectedStatus}
+                  onValueChange={(value) => {
+                    setSelectedStatus(value);
+                    setCurrentPage(1);
+                  }}
+                  disabled={loading}
+                >
+                  <SelectTrigger className="w-full sm:w-40 bg-background border-primary/20 focus:ring-primary/50 hover:shadow-sm">
+                    <Filter className="mr-2 h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder="All Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Out of Stock">Out of Stock</SelectItem>
+                    <SelectItem value="Low Stock">Low Stock</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-          </div>
+            </motion.div>
 
-          <div className="px-6 lg:px-8 py-6 lg:py-8">
+            {/* Product List */}
             <LoadingOverlay loading={loading && !error}>
-              <div className="hidden lg:block">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-200/60">
-                      <th className="text-left font-medium text-slate-900 py-4 pl-0 pr-6">Product</th>
-                      <th className="text-left font-medium text-slate-900 py-4 px-6">SKU</th>
-                      <th className="text-left font-medium text-slate-900 py-4 px-6">Price</th>
-                      <th className="text-left font-medium text-slate-900 py-4 px-6">Stock</th>
-                      <th className="text-left font-medium text-slate-900 py-4 px-6">Category</th>
-                      <th className="text-left font-medium text-slate-900 py-4 px-6">Status</th>
-                      <th className="text-right font-medium text-slate-900 py-4 pl-6 pr-0">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {products.length > 0 ? (
-                      products.map((product, index) => (
-                        <tr key={product.id} className={`border-b border-slate-100/60 ${index === products.length - 1 ? 'border-b-0' : ''}`}>
-                          <td className="py-6 pl-0 pr-6">{product.name}</td>
-                          <td className="py-6 px-6">{product.sku}</td>
-                          <td className="py-6 px-6">{formatPrice(product.price)}</td>
-                          <td className="py-6 px-6">{product.stock}</td>
-                          <td className="py-6 px-6">{product.categoryName}</td>
-                          <td className="py-6 px-6">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
-                              product.stockStatus === 'Active' ? 'bg-emerald-100 text-emerald-800' :
-                              product.stockStatus === 'Out of Stock' ? 'bg-red-100 text-red-800' :
-                              'bg-amber-100 text-amber-800'
-                            }`}>
-                              {product.stockStatus}
-                            </span>
-                          </td>
-                          <td className="py-6 pl-6 pr-0">
-                            <div className="flex items-center justify-end space-x-1">
-                              <button onClick={() => navigate(`/admin/products/${product.id}`)}>
-                                <Eye size={16} />
-                              </button>
-                              <Link to={`/admin/products/${product.id}/edit`}>
-                                <Edit size={16} />
-                              </Link>
-                              <button
-                                onClick={() => handleDeleteProduct(product.id)}
-                                disabled={deleteLoading === product.id}
-                              >
-                                {deleteLoading === product.id ? (
-                                  <Loader2 size={16} className="animate-spin" />
-                                ) : (
-                                  <Trash2 size={16} />
-                                )}
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="7" className="py-20 text-center">
-                          <div className="text-slate-500 space-y-2">
-                            {error ? (
-                              <div className="flex items-center justify-center">
-                                <AlertCircle size={20} className="mr-2 text-red-500" />
-                                <span>{error}</span>
+              <motion.div variants={containerVariants} initial="hidden" animate="visible">
+                {/* Desktop Table */}
+                <div className="hidden lg:block overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-muted/50 text-left text-sm font-medium text-muted-foreground">
+                        <th className="py-4 pl-0 pr-6">Product</th>
+                        <th className="py-4 px-6">SKU</th>
+                        <th className="py-4 px-6">Price</th>
+                        <th className="py-4 px-6">Stock</th>
+                        <th className="py-4 px-6">Category</th>
+                        <th className="py-4 px-6">Status</th>
+                        <th className="py-4 pl-6 pr-0 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <AnimatePresence>
+                        {products.length > 0 ? (
+                          products.map((product) => (
+                            <motion.tr
+                              key={product.id}
+                              variants={itemVariants}
+                              initial="hidden"
+                              animate="visible"
+                              exit={{ opacity: 0, height: 0 }}
+                              className="border-b border-muted/50 last:border-b-0 hover:bg-primary/10 transition-all duration-200"
+                            >
+                              <td className="py-4 pl-0 pr-6 font-medium text-secondary truncate max-w-xs">
+                                {product.name}
+                              </td>
+                              <td className="py-4 px-6 text-secondary">{product.sku}</td>
+                              <td className="py-4 px-6 text-secondary">{formatPrice(product.price, { notation: 'compact' })}</td>
+                              <td className="py-4 px-6 text-secondary">{product.stock}</td>
+                              <td className="py-4 px-6 text-secondary">{product.categoryName}</td>
+                              <td className="py-4 px-6">
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    product.stockStatus === 'Active'
+                                      ? 'bg-green-50 text-green-700'
+                                      : product.stockStatus === 'Out of Stock'
+                                      ? 'bg-red-50 text-red-700'
+                                      : 'bg-yellow-50 text-yellow-700'
+                                  }`}
+                                >
+                                  {product.stockStatus}
+                                </span>
+                              </td>
+                              <td className="py-4 pl-6 pr-0 text-right">
+                                <div className="flex items-center justify-end space-x-2">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => navigate(`/admin/products/${product.id}`)}
+                                    className="hover:bg-primary/20"
+                                    aria-label={`View product ${product.name}`}
+                                  >
+                                    <Eye className="h-4 w-4 text-secondary" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    asChild
+                                    className="hover:bg-primary/20"
+                                    aria-label={`Edit product ${product.name}`}
+                                  >
+                                    <Link to={`/admin/products/${product.id}/edit`}>
+                                      <Edit className="h-4 w-4 text-secondary" />
+                                    </Link>
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteProduct(product.id)}
+                                    disabled={deleteLoading === product.id}
+                                    className="hover:bg-red-50 hover:text-red-700"
+                                    aria-label={`Delete product ${product.name}`}
+                                  >
+                                    {deleteLoading === product.id ? (
+                                      <RefreshCw className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="7" className="py-12 text-center">
+                              <div className="text-muted-foreground space-y-2">
+                                <p className="text-lg font-medium">No products found</p>
+                                <p className="text-sm">Try adjusting your search or filters</p>
                               </div>
-                            ) : (
-                              <div className="space-y-2">
-                                <div className="text-lg font-medium">No products found</div>
-                                <div className="text-sm">Try adjusting your search or filters</div>
-                              </div>
-                            )}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
+                            </td>
+                          </tr>
+                        )}
+                      </AnimatePresence>
                     </tbody>
                   </table>
                 </div>
 
+                {/* Mobile Cards */}
                 <div className="lg:hidden space-y-4">
-                  {products.length > 0 ? (
-                    products.map((product) => (
-                      <div key={product.id} className="bg-white/80 border border-slate-200/60 rounded-2xl p-6">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-slate-900 text-lg mb-1 truncate">{product.name}</h3>
-                            <p className="text-slate-600 text-sm font-mono">{product.sku}</p>
-                          </div>
-                          <div className="flex items-center space-x-2 ml-4">
-                            <button onClick={() => navigate(`/admin/products/${product.id}`)}>
-                              <Eye size={16} />
-                            </button>
-                            <Link to={`/admin/products/${product.id}/edit`}>
-                              <Edit size={16} />
-                            </Link>
-                            <button
-                              onClick={() => handleDeleteProduct(product.id)}
-                              disabled={deleteLoading === product.id}
-                            >
-                              {deleteLoading === product.id ? (
-                                <Loader2 size={16} className="animate-spin" />
-                              ) : (
-                                <Trash2 size={16} />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-slate-600">Price</span>
-                            <div className="font-semibold text-slate-900 mt-1">{formatPrice(product.price)}</div>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Stock</span>
-                            <div className="font-medium text-slate-900 mt-1">{product.stock}</div>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Category</span>
-                            <div className="text-slate-900 mt-1">{product.categoryName}</div>
-                          </div>
-                          <div>
-                            <span className="text-slate-600">Status</span>
-                            <div className="mt-1">
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                product.stockStatus === 'Active' ? 'bg-emerald-100 text-emerald-800' :
-                                product.stockStatus === 'Out of Stock' ? 'bg-red-100 text-red-800' :
-                                'bg-amber-100 text-amber-800'
-                              }`}>
-                                {product.stockStatus}
-                              </span>
+                  <AnimatePresence>
+                    {products.length > 0 ? (
+                      products.map((product) => (
+                        <motion.div
+                          key={product.id}
+                          variants={itemVariants}
+                          initial="hidden"
+                          animate="visible"
+                          exit={{ opacity: 0, height: 0 }}
+                          className="border border-primary/20 bg-background rounded-lg p-4 shadow-sm hover:shadow-md transition-all duration-200"
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-base font-semibold text-secondary truncate">{product.name}</h3>
+                              <p className="text-xs text-muted-foreground font-mono mt-1">{product.sku}</p>
+                            </div>
+                            <div className="flex items-center space-x-2 ml-3">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => navigate(`/admin/products/${product.id}`)}
+                                className="hover:bg-primary/20"
+                                aria-label={`View product ${product.name}`}
+                              >
+                                <Eye className="h-4 w-4 text-secondary" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                asChild
+                                className="hover:bg-primary/20"
+                                aria-label={`Edit product ${product.name}`}
+                              >
+                                <Link to={`/admin/products/${product.id}/edit`}>
+                                  <Edit className="h-4 w-4 text-secondary" />
+                                </Link>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteProduct(product.id)}
+                                disabled={deleteLoading === product.id}
+                                className="hover:bg-red-50 hover:text-red-700"
+                                aria-label={`Delete product ${product.name}`}
+                              >
+                                {deleteLoading === product.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
                             </div>
                           </div>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground text-xs">Price</span>
+                              <p className="font-medium text-secondary mt-1">{formatPrice(product.price, { notation: 'compact' })}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">Stock</span>
+                              <p className="font-medium text-secondary mt-1">{product.stock}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">Category</span>
+                              <p className="text-secondary mt-1">{product.categoryName}</p>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground text-xs">Status</span>
+                              <p className="mt-1">
+                                <span
+                                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                                    product.stockStatus === 'Active'
+                                      ? 'bg-green-50 text-green-700'
+                                      : product.stockStatus === 'Out of Stock'
+                                      ? 'bg-red-50 text-red-700'
+                                      : 'bg-yellow-50 text-yellow-700'
+                                  }`}
+                                >
+                                  {product.stockStatus}
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))
+                    ) : (
+                      <div className="text-center py-12">
+                        <div className="text-muted-foreground space-y-2">
+                          <p className="text-lg font-medium">No products found</p>
+                          <p className="text-sm">Try adjusting your search or filters</p>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-20">
-                      <div className="text-slate-500 space-y-2">
-                        {error ? (
-                          <div className="flex items-center justify-center">
-                            <AlertCircle size={20} className="mr-2 text-red-500" />
-                            <span>{error}</span>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            <div className="text-lg font-medium">No products found</div>
-                            <div className="text-sm">Try adjusting your search or filters</div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                    )}
+                  </AnimatePresence>
                 </div>
-              </LoadingOverlay>
+              </motion.div>
 
+              {/* Pagination */}
               {totalProducts > 0 && (
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-8 pt-8 border-t border-slate-200/60">
-                  <div className="text-sm text-slate-600">
-                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalProducts)} of {totalProducts} products
-                  </div>
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-6 pt-6 border-t border-muted/50"
+                >
+                  <p className="text-sm text-muted-foreground">
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to{' '}
+                    {Math.min(currentPage * itemsPerPage, totalProducts)} of {totalProducts} products
+                  </p>
                   <div className="flex items-center justify-center sm:justify-end space-x-2 mt-4 sm:mt-0">
-                    <button
+                    <Button
+                      variant="outline"
+                      size="icon"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1 || loading}
-                      className="p-2 rounded-xl border border-slate-200/60 disabled:opacity-50"
+                      className="hover:bg-primary/10"
+                      aria-label="Previous page"
                     >
-                      <ChevronLeft size={16} />
-                    </button>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
                     {totalPages <= 5 ? (
-                      Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                        <button
+                      Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <Button
                           key={page}
+                          variant={currentPage === page ? 'default' : 'outline'}
+                          size="sm"
                           onClick={() => handlePageChange(page)}
                           disabled={loading}
-                          className={`min-w-[2.5rem] h-10 rounded-xl ${currentPage === page ? 'bg-slate-900 text-white' : 'bg-white/80 border border-slate-200/60'}`}
+                          className={currentPage === page ? 'bg-primary hover:bg-primary-dark' : 'hover:bg-primary/10'}
+                          aria-label={`Go to page ${page}`}
                         >
                           {page}
-                        </button>
+                        </Button>
                       ))
                     ) : (
                       <>
-                        <button
+                        <Button
+                          variant={currentPage === 1 ? 'default' : 'outline'}
+                          size="sm"
                           onClick={() => handlePageChange(1)}
                           disabled={loading}
-                          className={`min-w-[2.5rem] h-10 rounded-xl ${currentPage === 1 ? 'bg-slate-900 text-white' : 'bg-white/80 border border-slate-200/60'}`}
+                          className={currentPage === 1 ? 'bg-primary hover:bg-primary-dark' : 'hover:bg-primary/10'}
+                          aria-label="Go to first page"
                         >
                           1
-                        </button>
-                        {currentPage > 3 && <span className="px-2 text-slate-500">...</span>}
+                        </Button>
+                        {currentPage > 3 && <span className="px-2 text-muted-foreground">...</span>}
                         {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
                           let pageNum;
                           if (currentPage <= 2) pageNum = i + 2;
@@ -472,43 +563,52 @@ const ProductsPage = () => {
                           else pageNum = currentPage - 1 + i;
                           if (pageNum > 1 && pageNum < totalPages) {
                             return (
-                              <button
+                              <Button
                                 key={pageNum}
+                                variant={currentPage === pageNum ? 'default' : 'outline'}
+                                size="sm"
                                 onClick={() => handlePageChange(pageNum)}
                                 disabled={loading}
-                                className={`min-w-[2.5rem] h-10 rounded-xl ${currentPage === pageNum ? 'bg-slate-900 text-white' : 'bg-white/80 border border-slate-200/60'}`}
+                                className={currentPage === pageNum ? 'bg-primary hover:bg-primary-dark' : 'hover:bg-primary/10'}
+                                aria-label={`Go to page ${pageNum}`}
                               >
                                 {pageNum}
-                              </button>
+                              </Button>
                             );
                           }
                           return null;
                         }).filter(Boolean)}
-                        {currentPage < totalPages - 2 && <span className="px-2 text-slate-500">...</span>}
-                        <button
+                        {currentPage < totalPages - 2 && <span className="px-2 text-muted-foreground">...</span>}
+                        <Button
+                          variant={currentPage === totalPages ? 'default' : 'outline'}
+                          size="sm"
                           onClick={() => handlePageChange(totalPages)}
                           disabled={loading}
-                          className={`min-w-[2.5rem] h-10 rounded-xl ${currentPage === totalPages ? 'bg-slate-900 text-white' : 'bg-white/80 border border-slate-200/60'}`}
+                          className={currentPage === totalPages ? 'bg-primary hover:bg-primary-dark' : 'hover:bg-primary/10'}
+                          aria-label="Go to last page"
                         >
                           {totalPages}
-                        </button>
+                        </Button>
                       </>
                     )}
-                    <button
+                    <Button
+                      variant="outline"
+                      size="icon"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages || loading}
-                      className="p-2 rounded-xl border border-slate-200/60 disabled:opacity-50"
+                      className="hover:bg-primary/10"
+                      aria-label="Next page"
                     >
-                      <ChevronRight size={16} />
-                    </button>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
                   </div>
-                </div>
+                </motion.div>
               )}
-            </div>
-          </div>
-        </div>
-      </>
-    
+            </LoadingOverlay>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 };
 

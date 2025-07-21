@@ -13,8 +13,8 @@ const OrderService = {
     try {
       const response = await api.get('/admin/orders', { params });
       return {
-        orders: response.data.data.orders,
-        total: response.data.data.total
+        orders: response.data.data,
+        total: response.data.data.length
       };
     } catch (err) {
       throw new Error(err.response?.data?.message || 'Failed to fetch orders');
@@ -29,9 +29,10 @@ const OrderService = {
   getOrder: async (id) => {
     try {
       const response = await api.get(`/admin/orders/${id}`);
+      console.log('Get single Order', response)
       return { order: response.data.data.order };
     } catch (err) {
-      throw new Error(err.response?.data?.message || 'Failed to fetch order');
+      throw new Error(err.response?.data?.error || 'Failed to fetch order');
     }
   },
 

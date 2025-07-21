@@ -5,7 +5,7 @@ const cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 const ProductService = {
-  getAllProducts: async (params = {}) => {
+   getAllProducts: async (params = {}) => {
     const cacheKey = `products_${JSON.stringify(params)}`;
     const cached = cache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -14,26 +14,32 @@ const ProductService = {
 
     try {
       const response = await api.get('/admin/products', { params });
-      const { data, total } = response.data || { data: [], total: 0 };
+      const { data } = response.data || { data: [] };
+      const total = response.data.pagination.total || 0;
       const result = {
         data: data.map(product => ({
           id: product.id,
           name: product.name || '',
           sku: product.sku || '',
           price: product.price || 0,
-          stock: product.stockQuantity || 0,
-          categoryName: product.category?.name || 'Uncategorized',
-          stockStatus: product.stockQuantity === 0 ? 'Out of Stock' : product.stockQuantity < 10 ? 'Low Stock' : 'Active',
+          stock: product.stock || 0,
+          categoryName: product.categoryName || 'Uncategorized',
+          stockStatus: product.stock === 0 ? 'Out of Stock' : product.stock < 10 ? 'Low Stock' : 'Active',
           status: product.status || 'published',
-          images: product.images || [],
+          images: product.images.map(img => ({
+            url: img.url,
+            _id: img._id,
+            isMain: img.isMain || false,
+            public_id: img.public_id || '', // Include public_id
+          })) || [],
           variants: product.variants || [],
         })),
-        total: total || 0,
+        total,
       };
       cache.set(cacheKey, { data: result, timestamp: Date.now() });
       return result;
     } catch (error) {
-      console.error(`Error fetching products: ${error.response?.data?.message || error.message}`);
+      console.error(`Error fetching products: ${error.response?.data?.error || error.message}`);
       const defaultData = { data: [], total: 0 };
       cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
       return defaultData;
@@ -49,22 +55,28 @@ const ProductService = {
 
     try {
       const response = await api.get(`/admin/products/${id}`);
-      const product = response.data?.product || {};
+      console.log('🔥🔥🔥', response.data);
+      const product = response.data.data.product || {};
       const result = {
         product: {
           _id: product._id || id,
           name: product.name || '',
           sku: product.sku || '',
           price: product.price || 0,
-          stock: product.stockQuantity || 0,
+          stock: product.stock || 0,
           status: product.status || 'published',
-          category: product.category?.name || '',
-          categoryId: product.category?._id || '',
+          category: product.category || '',
+          categoryId: product.categoryId || '',
           description: product.description || '',
-          scent_notes: product.scentNotes?.top.concat(product.scentNotes?.middle || [], product.scentNotes?.base || []) || [],
-          ingredients: product.ingredients?.join(', ') || '',
+          scent_notes: product.scent_notes || [],
+          ingredients: product.ingredients || '',
           variants: product.variants || [],
-          images: product.images || [],
+          images: product.images.map(img => ({
+            url: img.url,
+            _id: img._id,
+            isMain: img.isMain || false,
+            public_id: img.public_id || '', // Include public_id
+          })) || [],
         },
       };
       cache.set(cacheKey, { data: result, timestamp: Date.now() });
@@ -84,13 +96,20 @@ const ProductService = {
 
     try {
       const response = await api.get('/admin/categories', { params });
-      const { data, total } = response.data || { data: [], total: 0 };
+      const { data, pagination } = response.data || { data: [], pagination: 0 };
       const result = {
         data: data.map(category => ({
           id: category._id,
           name: category.name || 'Uncategorized',
+          description:category.description || 'None',
+          slug:category.slug,
+          parent:category.parent,
+          parentName: category.parentName,
+          featured:category.featured,
+          productCount:category.productCount,
+          subcategoryCount:category.subcategoryCount
         })),
-        total: total || 0,
+        total: pagination.total || 0,
       };
       cache.set(cacheKey, { data: result, timestamp: Date.now() });
       return result;
@@ -181,7 +200,18 @@ const ProductService = {
         onUploadProgress,
       });
       cache.clear(); // Clear cache to force refresh after image upload
-      return response.data;
+      return {
+        ...response.data,
+        product: {
+          ...response.data.data.product,
+          images: response.data.data.product.images.map(img => ({
+            url: img.url,
+            _id: img._id,
+            isMain: img.isMain || false,
+            public_id: img.public_id || '', // Include public_id
+          })),
+        },
+      };
     } catch (error) {
       console.error(`Error uploading product images: ${error.response?.data?.error || error.message}`);
       throw new Error(error.response?.data?.error || 'Failed to upload images');
@@ -199,16 +229,27 @@ const ProductService = {
     }
   },
 
-  setMainProductImage: async (productId, imageId) => {
-    try {
-      const response = await api.put(`/admin/products/${productId}/images/${imageId}/main`);
-      cache.clear(); // Clear cache to force refresh after setting main image
-      return response.data;
-    } catch (error) {
-      console.error(`Error setting main product image: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to set main image');
-    }
-  },
+ setMainProductImage: async (productId, imageId) => {
+  try {
+    const response = await api.put(`/admin/products/${productId}/images/${imageId}/main`);
+    cache.clear(); // Clear cache to force refresh after setting main image
+    return {
+      ...response.data,
+      product: {
+        ...response.data.data.product,
+        images: response.data.data.product.images.map(img => ({
+          url: img.url,
+          _id: img._id,
+          isMain: img.isMain || false,
+          public_id: img.public_id || '', // Include public_id
+        })),
+      },
+    };
+  } catch (error) {
+    console.error(`Error setting main product image: ${error.response?.data?.message || error.message}`);
+    throw new Error(error.response?.data?.message || 'Failed to set main image');
+  }
+},
 
   createCategory: async (categoryData) => {
     try {
@@ -250,6 +291,16 @@ const ProductService = {
     } catch (error) {
       console.error(`Error generating SKU: ${error.response?.data?.error || error.message}`);
       throw new Error(error.response?.data?.error || 'Failed to generate SKU');
+    }
+  },
+
+  generateVariantSKU: async (productSKU, size) => {
+    try {
+      const response = await api.post('/admin/products/variant-sku', { productSKU, size });
+      return response.data.sku;
+    } catch (error) {
+      console.error(`Error generating variant SKU: ${error.response?.data?.error || error.message}`);
+      throw new Error(error.response?.data?.error || 'Failed to generate variant SKU');
     }
   },
 

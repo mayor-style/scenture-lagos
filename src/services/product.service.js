@@ -12,50 +12,59 @@ const ProductService = {
    * @param {string} [params.sort] - Sort field
    * @param {string} [params.order='asc'] - Sort order (asc, desc)
    * @param {string} [params.search] - Search term
-   * @param {string} [params.category] - Filter by category ID
+   * @param {string} [params.category] - Filter by category slug
    * @param {boolean} [params.featured] - Filter by featured status
    * @param {number} [params.minPrice] - Filter by minimum price
    * @param {number} [params.maxPrice] - Filter by maximum price
    * @returns {Promise<Object>} Products data with pagination
    */
   getProducts: async (params = {}) => {
-    const response = await api.get('/products', { params });
-    return response.data;
+    try {
+      const sortMap = {
+        'price-low-high': 'price-asc',
+        'price-high-low': 'price-desc',
+        newest: 'newest',
+        featured: 'featured',
+      };
+      const mappedParams = {
+        ...params,
+        sort: sortMap[params.sort] || params.sort || 'newest',
+      };
+      const response = await api.get('/products', { params: mappedParams });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      return { data: [], total: 0, page: 1, limit: params.limit || 12 };
+    }
   },
 
   /**
-   * Get a single product by ID
-   * @param {string} id - Product ID
-   * @returns {Promise<Object>} Product data
+   * Get a single product by slug
+   * @param {string} slug - Product slug
+   * @returns {Promise<Object>} Product data with related products
    */
-  getProduct: async (id) => {
-    const response = await api.get(`/products/${id}`);
-    return response.data;
+  getProduct: async (slug) => {
+    try {
+      const response = await api.get(`/products/${slug}`);
+      return response.data.data;
+    } catch (error) {
+      console.error('Error fetching product:', error);
+      throw error;
+    }
   },
 
   /**
    * Get featured products
-   * @param {Object} params - Query parameters
-   * @param {number} [params.limit=8] - Number of products to return
    * @returns {Promise<Object>} Featured products
    */
-  getFeaturedProducts: async (params = { limit: 8 }) => {
-    const response = await api.get('/products', { 
-      params: { ...params, featured: true } 
-    });
-    return response.data;
-  },
-
-  /**
-   * Get related products
-   * @param {string} id - Product ID
-   * @param {Object} params - Query parameters
-   * @param {number} [params.limit=4] - Number of products to return
-   * @returns {Promise<Object>} Related products
-   */
-  getRelatedProducts: async (id, params = { limit: 4 }) => {
-    const response = await api.get(`/products/${id}/related`, { params });
-    return response.data;
+  getFeaturedProducts: async () => {
+    try {
+      const response = await api.get('/products/featured', { params: { limit: 4 } });
+      return response.data.data.products || [];
+    } catch (error) {
+      console.error('Error fetching featured products:', error);
+      return [];
+    }
   },
 
   /**
@@ -63,8 +72,13 @@ const ProductService = {
    * @returns {Promise<Object>} Categories data
    */
   getCategories: async () => {
-    const response = await api.get('/categories');
-    return response.data;
+    try {
+      const response = await api.get('/categories', { params: { parent: 'none' } });
+      return response.data.data.categories || [];
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      return [];
+    }
   },
 
   /**
@@ -73,8 +87,13 @@ const ProductService = {
    * @returns {Promise<Object>} Category data
    */
   getCategory: async (id) => {
-    const response = await api.get(`/categories/${id}`);
-    return response.data;
+    try {
+      const response = await api.get(`/categories/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching category:', error);
+      throw error;
+    }
   },
 
   /**
@@ -88,10 +107,15 @@ const ProductService = {
    * @returns {Promise<Object>} Products data with pagination
    */
   getProductsByCategory: async (categoryId, params = {}) => {
-    const response = await api.get('/products', { 
-      params: { ...params, category: categoryId } 
-    });
-    return response.data;
+    try {
+      const response = await api.get('/products', {
+        params: { ...params, category: categoryId },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching products by category:', error);
+      return { data: [], total: 0, page: 1, limit: params.limit || 12 };
+    }
   },
 
   /**
@@ -103,10 +127,15 @@ const ProductService = {
    * @returns {Promise<Object>} Search results with pagination
    */
   searchProducts: async (query, params = {}) => {
-    const response = await api.get('/products', { 
-      params: { ...params, search: query } 
-    });
-    return response.data;
+    try {
+      const response = await api.get('/products', {
+        params: { ...params, search: query },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error searching products:', error);
+      return { data: [], total: 0, page: 1, limit: params.limit || 12 };
+    }
   },
 
   /**
@@ -118,8 +147,13 @@ const ProductService = {
    * @returns {Promise<Object>} Reviews data with pagination
    */
   getProductReviews: async (productId, params = {}) => {
-    const response = await api.get(`/products/${productId}/reviews`, { params });
-    return response.data;
+    try {
+      const response = await api.get(`/products/${productId}/reviews`, { params });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching product reviews:', error);
+      return { data: [], total: 0, page: 1, limit: params.limit || 5 };
+    }
   },
 
   /**
@@ -131,9 +165,14 @@ const ProductService = {
    * @returns {Promise<Object>} Created review
    */
   submitProductReview: async (productId, reviewData) => {
-    const response = await api.post(`/products/${productId}/reviews`, reviewData);
-    return response.data;
-  }
+    try {
+      const response = await api.post(`/products/${productId}/reviews`, reviewData);
+      return response.data;
+    } catch (error) {
+      console.error('Error submitting review:', error);
+      throw error;
+    }
+  },
 };
 
 export default ProductService;

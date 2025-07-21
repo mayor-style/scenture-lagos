@@ -17,9 +17,10 @@ const InventoryService = {
         delete mappedParams.status;
       }
       const response = await api.get('/admin/inventory', { params: mappedParams });
+      console.log('getting invento', response)
       return {
-        items: response.data.items || [],
-        total: response.data.total || 0,
+        items: response.data?.data.items || [],
+        total: response.data?.data.total || 0,
       };
     } catch (error) {
       console.error('Error fetching inventory:', error);
@@ -35,7 +36,7 @@ const InventoryService = {
   getInventoryItem: async (id) => {
     try {
       const response = await api.get(`/admin/inventory/${id}`);
-      return response.data.product || {};
+      return response.data?.data.product || {};
     } catch (error) {
       console.error(`Error fetching inventory item ${id}:`, error);
       throw error;
@@ -56,7 +57,7 @@ const InventoryService = {
         variantId: adjustmentData.variantId || null,
         allowNegative: false,
       });
-      return response.data;
+      return response.data?.data || response.data;
     } catch (error) {
       console.error(`Error adjusting stock for product ${id}:`, error);
       throw error;
@@ -72,7 +73,7 @@ const InventoryService = {
   getInventoryHistory: async (id, params = {}) => {
     try {
       const response = await api.get(`/admin/inventory/${id}/history`, { params });
-      return response.data;
+      return response.data?.data || response.data;
     } catch (error) {
       console.error(`Error fetching inventory history for product ${id}:`, error);
       throw error;
@@ -86,7 +87,7 @@ const InventoryService = {
   getInventoryStatistics: async () => {
     try {
       const response = await api.get('/admin/inventory', { params: { page: 1, limit: 1 } });
-      const { summary, totalInventoryValue } = response.data;
+      const { summary, totalInventoryValue } = response.data?.data || response.data;
       return {
         totalProducts: summary?.totalProducts || 0,
         inStockCount: summary?.totalProducts - (summary?.lowStockProducts || 0) - (summary?.outOfStockProducts || 0),
@@ -108,7 +109,7 @@ const InventoryService = {
   getLowStockItems: async (params = { limit: 10 }) => {
     try {
       const response = await api.get('/admin/inventory/low-stock', { params });
-      return { items: response.data.items || [] };
+      return { items: response.data?.data.items || response.data.items ||  [] };
     } catch (error) {
       console.error('Error fetching low stock items:', error);
       throw error;
@@ -122,7 +123,7 @@ const InventoryService = {
   generateReport: async () => {
     try {
       const response = await api.get('/admin/inventory/report', { responseType: 'blob' });
-      return response.data;
+      return response.data?.data || response.data;
     } catch (error) {
       console.error('Error generating inventory report:', error);
       throw error;
@@ -136,7 +137,7 @@ const InventoryService = {
   exportCSV: async () => {
     try {
       const response = await api.get('/admin/inventory/export', { responseType: 'blob' });
-      return response.data;
+      return response.data?.data || response.data;
     } catch (error) {
       console.error('Error exporting inventory CSV:', error);
       throw error;

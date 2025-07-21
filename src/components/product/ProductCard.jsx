@@ -5,22 +5,35 @@ import { Card, CardContent, CardFooter } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { formatPrice } from '../../lib/utils';
 import { useCart } from '../../contexts/CartContext';
-import { useToast } from '../../components/ui/Toast';
+import { useToast } from '../ui/Toast';
 
 const ProductCard = ({ product }) => {
-  const {addToast} = useToast();
+  const { addToast } = useToast();
   const { addToCart } = useCart();
+  // Select the image with isMain: true, or fall back to the first image, or placeholder
+  const productImg =
+    product.images && product.images.length > 0
+      ? product.images.find((img) => img.isMain)?.url || product.images[0].url
+      : 'https://via.placeholder.com/300?text=No+Image';
 
-  const handleAddToCart = (e) => {
+  const handleAddToCart = async (e) => {
     e.preventDefault();
-    // Ensure the product object is passed with the correct structure
-    addToCart({
-      id: product.id,
-      name: product.name,
-      price: product.price,
-      image: product.image || (product.images && product.images.length > 0 ? product.images[0] : null),
-      category: product.category,
-    }, 1);
+    try {
+      await addToCart(
+        {
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          image: productImg,
+          category: product.category,
+          slug: product.slug,
+          sku: product.sku || `SKU-${product.id}`,
+        },
+        1
+      );
+    } catch (err) {
+      // Error is handled by CartContext
+    }
   };
 
   return (
@@ -29,11 +42,11 @@ const ProductCard = ({ product }) => {
       role="article"
       aria-label={`Product card for ${product.name}`}
     >
-      <Link to={`/product/${product.id}`} className="block relative" tabIndex={0}>
+      <Link to={`/product/${product.slug}`} className="block relative" tabIndex={0}>
         <div className="relative aspect-square overflow-hidden bg-neutral-100">
           <img
-            src={product.image || (product.images && product.images.length > 0 ? product.images[0] : '/placeholder-image.jpg')}
-            alt={`Image of ${product.name} fragrance`}
+            src={productImg}
+            alt={`Main image of ${product.name}`}
             className="object-cover w-full h-full transition-all duration-300 group-hover:scale-[1.02] group-hover:brightness-105"
             loading="lazy"
           />
@@ -49,7 +62,7 @@ const ProductCard = ({ product }) => {
           </span>
 
           <Link
-            to={`/product/${product.id}`}
+            to={`/product/${product.slug}`}
             className="block group/link focus:outline-none focus:ring-2 focus:ring-neutral-300 rounded"
           >
             <h3 className="font-heading text-xl lg:text-2xl text-neutral-900 group-hover/link:text-neutral-700 transition-colors duration-200 leading-tight tracking-tight">
