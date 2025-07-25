@@ -92,12 +92,20 @@ useEffect(()=>{
       await AuthService.logout();
       setCurrentUser(null);
       addToast('Logged out successfully', 'success');
-      navigate('/admin/login');
+      
+      // Redirect based on user role
+      const userRole = localStorage.getItem('userRole');
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      navigate(isAdmin ? '/admin/login' : '/login');
     } catch (err) {
       console.error('Logout error:', err);
       // Still clear user state even if API call fails
       setCurrentUser(null);
-      navigate('/admin/login');
+      
+      // Redirect based on user role
+      const userRole = localStorage.getItem('userRole');
+      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
+      navigate(isAdmin ? '/admin/login' : '/login');
     } finally {
       setLoading(false);
     }
@@ -151,6 +159,84 @@ useEffect(()=>{
     return requiredRoles === currentUser.user.role;
   };
 
+  /**
+   * Register a new user
+   * @param {Object} userData - User registration data
+   */
+  const register = async (userData) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await AuthService.register(userData);
+      setCurrentUser(response.data);
+      addToast('Registration successful', 'success');
+      return response;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Registration failed');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Request password reset
+   * @param {Object} email - User email
+   */
+  const forgotPassword = async (email) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await AuthService.forgotPassword(email);
+      addToast('Password reset email sent', 'success');
+      return response;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to send reset email');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Verify reset token
+   * @param {string} token - Reset token
+   */
+  const verifyResetToken = async (token) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await AuthService.verifyResetToken(token);
+      return response;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Invalid or expired token');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Reset password with token
+   * @param {Object} data - Reset password data
+   * @param {string} data.token - Reset token
+   * @param {string} data.password - New password
+   */
+  const resetPassword = async (data) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await AuthService.resetPassword(data);
+      addToast('Password reset successful', 'success');
+      return response;
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to reset password');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Context value
   const value = {
     currentUser,
@@ -159,8 +245,12 @@ useEffect(()=>{
     login,
     adminLogin,
     logout,
-    updateUserDetails,
+    updateDetails: updateUserDetails,
     updatePassword,
+    register,
+    forgotPassword,
+    verifyResetToken,
+    resetPassword,
     isAuthenticated: !!currentUser,
     hasRole
   };

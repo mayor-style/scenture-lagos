@@ -1,22 +1,24 @@
-import api from './api';
+// src/services/product.service.js
+import api from './api'; // Assuming you have an axios instance configured here
 
+/**
+ * A centralized error handler that logs the error and throws a new,
+ * user-friendly error for React Query to catch.
+ * @param {string} context - A description of what was happening when the error occurred.
+ * @param {Error} error - The original error object from the catch block.
+ */
+const handleError = (context, error) => {
+  console.error(`Error ${context}:`, error.response?.data || error.message);
+  throw new Error(`Could not fetch ${context}. Please try again later.`);
+};
 /**
  * Product service for user-facing e-commerce website
  */
 const ProductService = {
-  /**
-   * Get all products with pagination, sorting, and filtering
-   * @param {Object} params - Query parameters
-   * @param {number} [params.page=1] - Page number
-   * @param {number} [params.limit=12] - Items per page
-   * @param {string} [params.sort] - Sort field
-   * @param {string} [params.order='asc'] - Sort order (asc, desc)
-   * @param {string} [params.search] - Search term
-   * @param {string} [params.category] - Filter by category slug
-   * @param {boolean} [params.featured] - Filter by featured status
-   * @param {number} [params.minPrice] - Filter by minimum price
-   * @param {number} [params.maxPrice] - Filter by maximum price
-   * @returns {Promise<Object>} Products data with pagination
+ /**
+   * Get all products with full filtering and pagination options.
+   * @param {Object} [params={}] - Query parameters for filtering, sorting, and pagination.
+   * @returns {Promise<Object>} A promise that resolves to the API response data.
    */
   getProducts: async (params = {}) => {
     try {
@@ -33,37 +35,38 @@ const ProductService = {
       const response = await api.get('/products', { params: mappedParams });
       return response.data;
     } catch (error) {
-      console.error('Error fetching products:', error);
-      return { data: [], total: 0, page: 1, limit: params.limit || 12 };
+      handleError('products', error);
     }
   },
 
   /**
-   * Get a single product by slug
-   * @param {string} slug - Product slug
-   * @returns {Promise<Object>} Product data with related products
+   * Get a single product by its unique slug.
+   * @param {string} slug - The product slug.
+   * @returns {Promise<Object>} A promise that resolves to a single product object.
    */
   getProduct: async (slug) => {
+    if (!slug) throw new Error('A product slug must be provided.');
     try {
       const response = await api.get(`/products/${slug}`);
       return response.data.data;
     } catch (error) {
-      console.error('Error fetching product:', error);
-      throw error;
+      handleError(`product "${slug}"`, error);
     }
   },
 
-  /**
-   * Get featured products
-   * @returns {Promise<Object>} Featured products
+   /**
+   * Get a limited number of featured products.
+   * This is the function that will be called by React Query.
+   * @param {number} [limit=4] - The number of products to fetch.
+   * @returns {Promise<Array>} A promise that resolves to an array of product objects.
    */
-  getFeaturedProducts: async () => {
+  getFeaturedProducts: async (limit = 4) => {
     try {
-      const response = await api.get('/products/featured', { params: { limit: 4 } });
+      const response = await api.get('/products/featured', { params: { limit } });
+      // Ensure we always return an array, even if the API response is slightly different.
       return response.data.data.products || [];
     } catch (error) {
-      console.error('Error fetching featured products:', error);
-      return [];
+      handleError('featured products', error);
     }
   },
 
@@ -76,8 +79,7 @@ const ProductService = {
       const response = await api.get('/categories', { params: { parent: 'none' } });
       return response.data.data.categories || [];
     } catch (error) {
-      console.error('Error fetching categories:', error);
-      return [];
+      handleError(`product categories`, error)
     }
   },
 
@@ -91,8 +93,7 @@ const ProductService = {
       const response = await api.get(`/categories/${id}`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching category:', error);
-      throw error;
+     handleError('product Category');
     }
   },
 

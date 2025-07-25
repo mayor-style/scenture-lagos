@@ -1,226 +1,162 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, ShoppingBag, User, Search, LogIn } from 'lucide-react';
-import { Button } from '../ui/Button';
-import { useCart } from '../../contexts/CartContext';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Menu, X, ShoppingBag, User, Search } from 'lucide-react';
 
-const Header = () => {
+import { useCart } from '../../contexts/CartContext';
+import { useAuth } from '../../contexts/AuthContext';
+
+export default function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
-  const location = useLocation();
+  const { currentUser, isAuthenticated } = useAuth();
   const { cart } = useCart();
+  const location = useLocation();
 
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen);
-  };
-
-  // Handle scroll effect
+  // --- Hooks ---
+  // Close mobile menu on route change
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20);
-    };
+    setIsMenuOpen(false);
+  }, [location.pathname]);
 
-    window.addEventListener('scroll', handleScroll);
+  // Handle body scroll lock when menu is open
+  useEffect(() => {
+    document.body.style.overflow = isMenuOpen ? 'hidden' : 'auto';
+  }, [isMenuOpen]);
+
+  // Handle header style on scroll
+  useEffect(() => {
+    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close mobile menu when route changes
-  useEffect(() => {
-    setIsMenuOpen(false);
-  }, [location]);
-
-  // Check if current route is active
-  const isActiveRoute = (path) => {
-    if (path === '/' && location.pathname === '/') return true;
-    if (path !== '/' && location.pathname.startsWith(path)) return true;
-    return false;
-  };
-
+  // --- Data & Config ---
   const navItems = [
     { path: '/', label: 'Home' },
     { path: '/shop', label: 'Shop' },
-    { path: '/about', label: 'About' },
+    { path: '/about', label: 'About Us' },
     { path: '/contact', label: 'Contact' },
-    { path: '/admin/login', label: 'Login' }, // Added admin login link
   ];
-
-  // Get cart item count
+  
   const cartItemCount = cart?.totalItems || 0;
+  const isActiveRoute = (path) => location.pathname === path;
+
+  // --- Animation Variants ---
+  const mobileMenuVariants = {
+    hidden: { opacity: 0, y: -20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+    exit: { opacity: 0, y: -20, transition: { duration: 0.2, ease: 'easeIn' } },
+  };
+  
+  const navItemVariants = {
+    hidden: { opacity: 0, y: -10 },
+    visible: (i) => ({
+      opacity: 1,
+      y: 0,
+      transition: { delay: i * 0.05, duration: 0.2, ease: 'easeOut' },
+    }),
+  };
 
   return (
     <header 
-      className={`sticky top-0 z-50 transition-all duration-300 ease-in-out ${
-        isScrolled 
-          ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100' 
-          : 'bg-white border-b border-gray-50'
+      className={`sticky top-0 z-50 transition-all duration-300 ${
+        isScrolled || isMenuOpen 
+        ? 'bg-white/80 backdrop-blur-lg shadow-sm border-b border-neutral-200/80' 
+        : 'bg-white/50 border-b border-transparent'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 lg:h-20">
+      <div className="container px-6">
+        <div className="flex items-center justify-between h-20">
+          
           {/* Logo */}
-          <Link 
-            to="/" 
-            className="font-heading text-xl lg:text-2xl font-semibold text-gray-900 hover:text-gray-700 transition-colors duration-200"
-          >
-            Scenture Lagos
+          <Link to="/" className="font-heading text-xl font-bold text-neutral-900">
+            Scenture Lagos<span className="text-neutral-400">.</span>
           </Link>
 
           {/* Desktop Navigation */}
-          <nav className="hidden lg:flex items-center space-x-1">
+          <nav className="hidden lg:flex items-center gap-2">
             {navItems.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}
-                className={`relative px-4 py-2 text-sm font-medium transition-all duration-200 rounded-lg hover:bg-gray-50 ${
-                  isActiveRoute(item.path)
-                    ? 'text-gray-900'
-                    : 'text-gray-600 hover:text-gray-900'
+                className={`relative px-3 py-2 text-sm font-medium transition-colors duration-200 rounded-md ${
+                  isActiveRoute(item.path) ? 'text-neutral-900' : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100/60'
                 }`}
               >
                 {item.label}
                 {isActiveRoute(item.path) && (
-                  <span className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-gray-900 rounded-full" />
+                  <motion.div
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-neutral-900"
+                    layoutId="active-underline" // This creates the magic sliding effect
+                    transition={{ duration: 0.3, ease: 'easeOut' }}
+                  />
                 )}
               </Link>
             ))}
           </nav>
 
-          {/* Desktop Icons */}
-          <div className="hidden lg:flex items-center space-x-2">
-            <button 
-              aria-label="Search" 
-              className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all duration-200 group"
-            >
-              <Search size={20} className="group-hover:scale-110 transition-transform duration-200" />
+          {/* Icons & Mobile Menu Toggle */}
+          <div className="flex items-center gap-2">
+            <button aria-label="Search" className="hidden lg:block p-2 text-neutral-600 hover:text-neutral-900 rounded-full hover:bg-neutral-100/60 transition-colors">
+              <Search size={20} />
             </button>
-            
-            <Link
-              to="/account"
-              aria-label="Account"
-              className="p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all duration-200 group"
-            >
-              <User size={20} className="group-hover:scale-110 transition-transform duration-200" />
+            <Link to={isAuthenticated ? "/account" : "/login"} aria-label="Account" className="hidden lg:block p-2 text-neutral-600 hover:text-neutral-900 rounded-full hover:bg-neutral-100/60 transition-colors">
+              <User size={20} />
             </Link>
-            
-            <Link
-              to="/cart"
-              aria-label="Cart"
-              className="relative p-2.5 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all duration-200 group"
-            >
-              <ShoppingBag size={20} className="group-hover:scale-110 transition-transform duration-200" />
-              <span className="absolute -top-1 -right-1 bg-gray-900 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-medium shadow-lg">
-                {cartItemCount}
-              </span>
-            </Link>
-          </div>
-
-          {/* Mobile Icons & Menu Button */}
-          <div className="flex items-center space-x-2 lg:hidden">
-            <Link
-              to="/cart"
-              aria-label="Cart"
-              className="relative p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all duration-200"
-            >
+            <Link to="/cart" aria-label="View Cart" className="relative p-2 text-neutral-600 hover:text-neutral-900 rounded-full hover:bg-neutral-100/60 transition-colors">
               <ShoppingBag size={20} />
-              <span className="absolute -top-1 -right-1 bg-gray-900 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-medium shadow-lg">
-                {cartItemCount}
-              </span>
-            </Link>
-            
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={isMenuOpen ? 'Close Menu' : 'Open Menu'}
-              onClick={toggleMenu}
-              className={`p-2 rounded-xl transition-all duration-200 ${
-                isMenuOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
-            >
-              {isMenuOpen ? (
-                <X size={24} className="rotate-90 transition-transform duration-200" />
-              ) : (
-                <Menu size={24} className="transition-transform duration-200" />
+              {cartItemCount > 0 && (
+                <span className="absolute top-0 right-0 flex items-center justify-center w-4 h-4 text-xs font-bold text-white bg-neutral-900 rounded-full">
+                  {cartItemCount}
+                </span>
               )}
-            </Button>
+            </Link>
+            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="lg:hidden p-2 text-neutral-600 hover:text-neutral-900" aria-label="Toggle menu">
+              {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
         </div>
       </div>
-
-      {/* Mobile Menu */}
-      <div 
-        className={`lg:hidden transition-all duration-300 ease-in-out overflow-hidden ${
-          isMenuOpen 
-            ? 'max-h-96 opacity-100 border-b border-gray-100' 
-            : 'max-h-0 opacity-0'
-        }`}
-      >
-        <div className="bg-white/95 backdrop-blur-md">
-          <nav className="max-w-7xl mx-auto px-4 sm:px-6 py-4 space-y-1">
-            {navItems.map((item, index) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`block px-4 py-3 text-base font-medium rounded-xl transition-all duration-200 ${
-                  isActiveRoute(item.path)
-                    ? 'text-gray-900 bg-gray-50'
-                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-                style={{ 
-                  animationDelay: `${index * 50}ms`,
-                  animation: isMenuOpen ? 'slideInUp 0.3s ease-out forwards' : 'none'
-                }}
-                onClick={toggleMenu}
-              >
-                {/* Add LogIn icon for the Login link */}
-                {item.path === '/admin/login' ? (
-                  <span className="flex items-center gap-3">
-                    <LogIn size={20} />
+      
+      {/* Mobile Menu with Framer Motion */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <motion.div
+            key="mobile-menu"
+            variants={mobileMenuVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="lg:hidden absolute top-full left-0 w-full h-screen bg-white/95 backdrop-blur-lg border-t border-neutral-200/80"
+          >
+            <nav className="container flex flex-col px-6 pt-8 gap-2">
+              {navItems.map((item, i) => (
+                <motion.div key={item.path} custom={i} variants={navItemVariants}>
+                  <Link
+                    to={item.path}
+                    className={`block w-full p-4 text-lg font-medium text-left rounded-lg ${
+                      isActiveRoute(item.path) ? 'text-neutral-900 bg-neutral-100' : 'text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100'
+                    }`}
+                  >
                     {item.label}
-                  </span>
-                ) : (
-                  item.label
-                )}
-              </Link>
-            ))}
-            
-            {/* Mobile Action Buttons */}
-            <div className="flex items-center justify-start space-x-2 px-4 pt-4 border-t border-gray-100 mt-4">
-              <button
-                aria-label="Search"
-                className="flex-1 flex items-center justify-center gap-3 px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all duration-200"
-              >
-                <Search size={20} />
-                <span className="text-sm font-medium">Search</span>
-              </button>
-              
-              <Link
-                to="/account"
-                aria-label="Account"
-                className="flex-1 flex items-center justify-center gap-3 px-4 py-3 text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-xl transition-all duration-200"
-                onClick={toggleMenu}
-              >
-                <User size={20} />
-                <span className="text-sm font-medium">Account</span>
-              </Link>
-            </div>
-          </nav>
-        </div>
-      </div>
-
-      <style jsx>{`
-        @keyframes slideInUp {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
+                  </Link>
+                </motion.div>
+              ))}
+              <motion.div custom={navItems.length} variants={navItemVariants} className="mt-6 border-t border-neutral-200 pt-6">
+                <Link to={isAuthenticated ? "/account" : "/login"} className="flex items-center gap-4 w-full p-4 text-lg font-medium text-left rounded-lg text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100">
+                  <User size={22} />
+                  <span>{isAuthenticated ? 'My Account' : 'Login / Register'}</span>
+                </Link>
+                <button className="flex items-center gap-4 w-full p-4 text-lg font-medium text-left rounded-lg text-neutral-600 hover:text-neutral-900 hover:bg-neutral-100">
+                  <Search size={22} />
+                  <span>Search</span>
+                </button>
+              </motion.div>
+            </nav>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   );
-};
-
-export default Header;
+}

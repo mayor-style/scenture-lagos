@@ -1,9 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+// src/pages/admin/DashboardPage.jsx
+import React, { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import { addDays } from 'date-fns';
 import { motion } from 'framer-motion';
 import { RefreshCw, Plus, Package, ShoppingCart, Users } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '../../components/ui/Toast';
 import { Button } from '../../components/ui/Button';
 import DashboardService from '../../services/admin/dashboard.service';
@@ -28,60 +30,48 @@ const containerVariants = {
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { addToast } = useToast();
-
-  const [state, setState] = useState({
-    isLoading: true,
-    error: null,
-    summary: null,
-    recentOrders: [],
-    activityFeed: [],
-  });
+  const queryClient = useQueryClient();
 
   const [dateRange, setDateRange] = useState({
     from: addDays(new Date(), -30),
     to: new Date(),
   });
 
-  const loadDashboardData = useCallback(async () => {
-    setState((prev) => ({ ...prev, isLoading: true, error: null }));
-    try {
-      DashboardService.clearCache();
-      const params = {
-        startDate: dateRange.from.toISOString(),
-        endDate: dateRange.to.toISOString(),
-      };
-      const [summaryRes, ordersRes, activityRes] = await Promise.all([
-        DashboardService.getDashboardSummary(params),
-        DashboardService.getRecentOrders({ limit: 5 }),
-        DashboardService.getActivityFeed({ limit: 10 }),
-      ]);
+  const queryParams = {
+    startDate: dateRange.from?.toISOString(),
+    endDate: dateRange.to?.toISOString(),
+  };
 
-      setState({
-        isLoading: false,
-        error: null,
-        summary: summaryRes,
-        recentOrders: ordersRes.orders,
-        activityFeed: activityRes.activities,
-      });
-      addToast('Dashboard refreshed', 'success');
-    } catch (err) {
-      const errorMessage = err.message || 'Could not load dashboard';
-      setState({
-        isLoading: false,
-        error: errorMessage,
-        summary: null,
-        recentOrders: [],
-        activityFeed: [],
-      });
-      addToast(errorMessage, 'error');
-    }
-  }, [dateRange]);
+  // --- Data Fetching with React Query ---
+  const summaryQuery = useQuery({
+    queryKey: ['dashboard', 'summary', queryParams],
+    queryFn: () => DashboardService.getDashboardSummary(queryParams),
+    keepPreviousData: true, // Prevents UI flicker when changing date ranges
+  });
 
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+  const recentOrdersQuery = useQuery({
+    queryKey: ['dashboard', 'recentOrders'],
+    queryFn: () => DashboardService.getRecentOrders({ limit: 5 }),
+  });
 
-  const { isLoading, error, summary, recentOrders, activityFeed } = state;
+  const activityFeedQuery = useQuery({
+    queryKey: ['dashboard', 'activityFeed'],
+    queryFn: () => DashboardService.getActivityFeed({ limit: 10 }),
+  });
+  
+  // --- Derived State ---
+  const isLoading = summaryQuery.isFetching || recentOrdersQuery.isLoading || activityFeedQuery.isLoading;
+  const error = summaryQuery.error || recentOrdersQuery.error || activityFeedQuery.error;
+  
+  const summary = summaryQuery.data;
+  const recentOrders = recentOrdersQuery.data?.orders || [];
+  const activityFeed = activityFeedQuery.data?.activities || [];
+
+  const handleRefresh = () => {
+    // Invalidate all queries related to the dashboard to refetch fresh data
+    queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    addToast('Dashboard data has been refreshed.', 'success');
+  };
 
   return (
     <>
@@ -98,11 +88,11 @@ const DashboardPage = () => {
             <p className="text-sm text-muted-foreground mt-1.5">Overview of your store's performance</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <DashboardDateRangePicker dateRange={dateRange} setDateRange={setDateRange} />
+            <DashboardDateRangePicker dateRange={dateRange} setDateRange={setDateRange} disabled={summaryQuery.isFetching} />
             <Button
               variant="outline"
               size="sm"
-              onClick={loadDashboardData}
+              onClick={handleRefresh}
               disabled={isLoading}
               className="group hover:bg-primary/10"
             >
@@ -124,8 +114,8 @@ const DashboardPage = () => {
         {error && !isLoading && (
           <ErrorState
             title="Something went wrong"
-            message={error}
-            onRetry={loadDashboardData}
+            message={error.message || "Could not load dashboard data. Please try again."}
+            onRetry={handleRefresh}
             className="py-8 px-4 sm:px-6"
           />
         )}
@@ -137,7 +127,7 @@ const DashboardPage = () => {
           initial="hidden"
           animate="visible"
         >
-          {isLoading
+          {summaryQuery.isLoading
             ? Array.from({ length: 4 }).map((_, i) => <MetricCardSkeleton key={i} />)
             : [
                 {
@@ -170,27 +160,18 @@ const DashboardPage = () => {
                   icon: <Package className="h-6 w-6 text-purple-600" />,
                   bg: 'bg-purple-50',
                 },
-              ].map(({ title, value, growth, format, footerText, icon, bg }, index) => (
-                <DashboardMetricCard
-                  key={index}
-                  title={title}
-                  value={value}
-                  growth={growth}
-                  format={format}
-                  footerText={footerText}
-                  icon={icon}
-                  bg={bg}
-                />
+              ].map((props, index) => (
+                <DashboardMetricCard key={index} {...props} />
               ))}
         </motion.section>
 
         {/* Main Content Grid */}
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div>{isLoading ? <SalesChartSkeleton /> : <SalesOverviewChart data={summary?.charts.salesChart} />}</div>
-          <div>{isLoading ? <RecentOrdersSkeleton /> : <RecentOrders orders={recentOrders} />}</div>
+          <div>{summaryQuery.isLoading ? <SalesChartSkeleton /> : <SalesOverviewChart data={summary?.charts.salesChart} />}</div>
+          <div>{recentOrdersQuery.isLoading ? <RecentOrdersSkeleton /> : <RecentOrders orders={recentOrders} />}</div>
         </section>
         <section className="grid grid-cols-1">
-          {isLoading ? <ActivityFeedSkeleton /> : <ActivityFeed activities={activityFeed} />}
+          {activityFeedQuery.isLoading ? <ActivityFeedSkeleton /> : <ActivityFeed activities={activityFeed} />}
         </section>
       </div>
     </>

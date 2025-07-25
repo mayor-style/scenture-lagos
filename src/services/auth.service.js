@@ -118,6 +118,55 @@ const AuthService = {
     }
     
     return requiredRoles === userRole;
+  },
+
+  /**
+   * Register a new user
+   * @param {Object} userData - User registration data
+   * @returns {Promise<Object>} Registered user data and token
+   */
+  register: async (userData) => {
+    const response = await api.post('/auth/register', userData);
+    if (response.data.success) {
+      // Store token in localStorage
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('isAuthenticated', 'true');
+      localStorage.setItem('userRole', 'customer');
+    }
+    return response.data;
+  },
+
+  /**
+   * Request password reset
+   * @param {Object} data - Email data
+   * @param {string} data.email - User email
+   * @returns {Promise<Object>} Success message
+   */
+  forgotPassword: async (data) => {
+    const response = await api.post('/auth/forgotpassword', data);
+    return response.data;
+  },
+
+  /**
+   * Verify reset token validity
+   * @param {string} token - Reset token
+   * @returns {Promise<Object>} Token validity status
+   */
+  verifyResetToken: async (token) => {
+    const response = await api.get(`/auth/resetpassword/${token}`);
+    return response.data;
+  },
+
+  /**
+   * Reset password with token
+   * @param {Object} data - Reset password data
+   * @param {string} data.token - Reset token
+   * @param {string} data.password - New password
+   * @returns {Promise<Object>} Success message
+   */
+  resetPassword: async (data) => {
+    const response = await api.put(`/auth/resetpassword/${data.token}`, { password: data.password });
+    return response.data;
   }
 };
 

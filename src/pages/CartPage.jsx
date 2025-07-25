@@ -1,284 +1,159 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Trash2, ShoppingBag, ArrowRight, Plus, Minus } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { formatPrice } from '../lib/utils';
 import { useCart } from '../contexts/CartContext';
 
+// --- Sub-components for better structure and performance ---
+
+// Memoized Cart Item Component
+const CartItem = React.memo(({ item, onUpdate, onRemove }) => {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 50, scale: 0.9 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -50, transition: { duration: 0.3 } }}
+      transition={{ type: 'spring', stiffness: 200, damping: 25 }}
+      className="flex flex-col sm:flex-row gap-5 p-5"
+    >
+      <div className="w-full sm:w-28 h-32 sm:h-28 bg-slate-100 rounded-2xl overflow-hidden flex-shrink-0">
+        <img
+          src={item.productImage || 'https://via.placeholder.com/150?text=No+Image'}
+          alt={item.productName}
+          className="w-full h-full object-cover"
+          onError={(e) => { e.target.src = 'https://via.placeholder.com/150?text=No+Image'; }}
+        />
+      </div>
+      <div className="flex-grow flex flex-col justify-between gap-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="font-medium text-slate-800 leading-tight">
+              <Link to={`/product/${item.productSlug}`} className="hover:text-primary transition-colors">{item.productName}</Link>
+            </h3>
+            <p className="text-sm text-slate-500 capitalize">{item.category || 'Uncategorized'}</p>
+          </div>
+          <p className="font-semibold text-lg text-slate-900">{formatPrice(item.price)}</p>
+        </div>
+        <div className="flex justify-between items-center">
+          <div className="flex items-center border border-slate-200 rounded-full">
+            <button onClick={() => onUpdate(item._id, item.quantity - 1)} disabled={item.quantity <= 1} className="p-2 text-slate-500 disabled:text-slate-300 hover:bg-slate-100 rounded-l-full transition-colors"><Minus size={16} /></button>
+            <span className="w-10 text-center text-sm font-medium text-slate-800">{item.quantity}</span>
+            <button onClick={() => onUpdate(item._id, item.quantity + 1)} className="p-2 text-slate-500 hover:bg-slate-100 rounded-r-full transition-colors"><Plus size={16} /></button>
+          </div>
+          <button onClick={() => onRemove(item._id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all" title="Remove item">
+            <Trash2 size={18} />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
+// Memoized Order Summary Component
+const OrderSummary = React.memo(({ cart }) => {
+  return (
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 xl:sticky xl:top-24">
+      <div className="p-6 border-b border-slate-200">
+        <h2 className="font-heading text-xl text-slate-900">Order Summary</h2>
+      </div>
+      <div className="p-6 space-y-4">
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between items-center"><span className="text-slate-600">Subtotal</span><span className="font-medium text-slate-800">{formatPrice(cart.subtotal)}</span></div>
+          {cart.discount > 0 && <div className="flex justify-between items-center"><span className="text-slate-600">Discount ({cart.coupon?.code})</span><span className="font-medium text-emerald-600">-{formatPrice(cart.discount)}</span></div>}
+          <div className="flex justify-between items-center"><span className="text-slate-600">Shipping</span><span className="text-slate-500">Calculated at next step</span></div>
+        </div>
+        <div className="border-t border-slate-200 pt-4">
+          <div className="flex justify-between items-baseline">
+            <span className="font-medium text-slate-900">Estimated Total</span>
+            <span className="font-semibold text-2xl text-slate-900">{formatPrice(cart.total)}</span>
+          </div>
+        </div>
+      </div>
+      <div className="p-6 bg-slate-50/50 rounded-b-3xl">
+        <Button asChild size="lg" className="w-full text-base rounded-2xl">
+          <Link to="/checkout">
+            Proceed to Checkout <ArrowRight size={20} className="ml-2" />
+          </Link>
+        </Button>
+      </div>
+    </div>
+  );
+});
+
+// Empty Cart Component
+const EmptyCart = () => (
+    <div className="min-h-[70vh] flex items-center justify-center p-4">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center space-y-5">
+        <div className="w-24 h-24 bg-slate-100 rounded-full flex items-center justify-center mx-auto">
+          <ShoppingBag size={48} strokeWidth={1.5} className="text-slate-400" />
+        </div>
+        <h2 className="font-heading text-3xl text-slate-800">Your cart is empty</h2>
+        <p className="text-slate-500 max-w-sm">Looks like you haven't added anything to your cart yet. Explore our collections to find something you'll love.</p>
+        <Button asChild size="lg" className="rounded-full">
+            <Link to="/shop">
+              Start Shopping <ArrowRight size={18} className="ml-2" />
+            </Link>
+        </Button>
+      </motion.div>
+    </div>
+);
+
+// Cart Page Loader
+const CartPageLoader = () => (
+    <div className="container max-w-7xl px-4 sm:px-6 lg:px-8 py-12 animate-pulse">
+        <div className="h-10 w-1/3 bg-slate-200 rounded-lg mx-auto mb-12"></div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-12">
+            <div className="xl:col-span-2 space-y-4">
+                {[...Array(2)].map((_, i) => (
+                    <div key={i} className="flex gap-5 p-5 bg-slate-100 rounded-2xl">
+                        <div className="w-28 h-28 bg-slate-200 rounded-2xl flex-shrink-0"></div>
+                        <div className="flex-grow space-y-4">
+                            <div className="h-5 w-3/4 bg-slate-200 rounded-md"></div>
+                            <div className="h-4 w-1/4 bg-slate-200 rounded-md"></div>
+                            <div className="flex justify-between items-center">
+                                <div className="h-10 w-28 bg-slate-200 rounded-full"></div>
+                                <div className="h-8 w-8 bg-slate-200 rounded-full"></div>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+            <div className="h-80 bg-slate-100 rounded-3xl"></div>
+        </div>
+    </div>
+);
+
+
+// Main Cart Page Component
 const CartPage = () => {
   const { cart, loading, updateCartItem, removeFromCart } = useCart();
 
-  const fadeIn = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.25, 0.46, 0.45, 0.94] } },
-  };
-
-  const slideIn = {
-    hidden: { opacity: 0, x: -30 },
-    visible: { opacity: 1, x: 0, transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] } },
-  };
-
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.12,
-        delayChildren: 0.2,
-      },
-    },
-  };
-
-  const scaleIn = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: 'easeOut' } },
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-white">
-        <div className="relative">
-          <div className="animate-spin rounded-full h-16 w-16 border-2 border-gray-200"></div>
-          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-primary absolute top-0 left-0"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!cart || !cart.items || cart.items.length === 0) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-gray-50 via-white to-gray-50">
-        <motion.div
-          initial="hidden"
-          animate="visible"
-          variants={fadeIn}
-          className="text-center max-w-md"
-        >
-          <motion.div
-            initial={{ scale: 0, rotate: -10 }}
-            animate={{ scale: 1, rotate: 0 }}
-            transition={{ delay: 0.3, type: 'spring', stiffness: 150, damping: 12 }}
-            className="w-32 h-32 bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-8 border border-primary/10 shadow-lg shadow-primary/5"
-          >
-            <ShoppingBag size={48} className="text-primary/70" />
-          </motion.div>
-          <h2 className="font-heading text-3xl sm:text-4xl mb-6 text-secondary bg-gradient-to-r from-secondary to-secondary/80 bg-clip-text">
-            Your cart awaits
-          </h2>
-          <p className="text-secondary/60 mb-12 leading-relaxed text-lg">
-            Discover our curated collection of premium products crafted for those who appreciate excellence.
-          </p>
-          <Button asChild size="lg" className="px-10 py-4 text-base font-medium rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300">
-            <Link to="/shop" className="inline-flex items-center gap-3">
-              Explore Collection
-              <ArrowRight size={20} />
-            </Link>
-          </Button>
-        </motion.div>
-      </div>
-    );
-  }
-
-  const handleUpdateQuantity = (itemId, newQuantity) => {
-    if (newQuantity < 1) return;
-    updateCartItem(itemId, newQuantity);
-  };
-
-  const handleRemoveItem = (itemId) => {
-    removeFromCart(itemId);
-  };
+  if (loading) return <CartPageLoader />;
+  if (!cart || !cart.items || cart.items.length === 0) return <EmptyCart />;
 
   return (
-    <div className="bg-gradient-to-br from-gray-50 via-white to-gray-50 min-h-screen">
-      <div className="pt-8 sm:pt-12 lg:pt-16 pb-8 sm:pb-12">
-        <div className="container max-w-7xl px-4 sm:px-6 lg:px-8">
-          <motion.div initial="hidden" animate="visible" variants={fadeIn} className="text-center">
-            <h1 className="font-heading text-3xl sm:text-4xl lg:text-5xl mb-4 sm:mb-6 text-secondary bg-gradient-to-r from-secondary via-secondary to-secondary/80 bg-clip-text leading-tight">
-              Shopping Cart
-            </h1>
-            <p className="text-secondary/60 text-base sm:text-lg max-w-md mx-auto leading-relaxed">
-              Review your curated selection
-            </p>
-          </motion.div>
-        </div>
-      </div>
-
-      <div className="container max-w-7xl px-4 sm:px-6 lg:px-8 pb-16 sm:pb-24">
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 sm:gap-8 lg:gap-12">
-          <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="xl:col-span-2">
-            <div className="bg-white rounded-3xl shadow-sm border border-gray-100/50 overflow-hidden backdrop-blur-sm">
-              <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b border-gray-100/50 bg-gradient-to-r from-gray-50/50 to-gray-50/30">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0">
-                  <div>
-                    <h2 className="font-heading text-lg sm:text-xl text-secondary">Your Selection</h2>
-                    <p className="text-sm text-secondary/60 mt-1">
-                      {cart.items.length} {cart.items.length === 1 ? 'item' : 'items'} carefully chosen
-                    </p>
-                  </div>
-                  <Link
-                    to="/shop"
-                    className="text-primary hover:text-primary-dark transition-colors text-sm font-medium inline-flex items-center gap-2 group bg-primary/5 px-3 py-2 rounded-xl hover:bg-primary/10"
-                  >
-                    Continue Shopping
-                    <ArrowRight size={14} className="group-hover:translate-x-1 transition-transform" />
-                  </Link>
-                </div>
-              </div>
-
-              <div className="divide-y divide-gray-100/50">
-                {cart.items.map((item, index) => (
-                  <motion.div
-                    key={item._id}
-                    variants={slideIn}
-                    custom={index}
-                    className="p-4 sm:p-6 lg:p-8 hover:bg-gray-50/30 transition-all duration-300 group"
-                  >
-                    <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                      <div className="w-full sm:w-24 lg:w-32 h-32 sm:h-24 lg:h-32 bg-gradient-to-br from-gray-100 to-gray-50 rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100/50 shadow-sm">
-                        <img
-                          src={item.productImage || 'https://via.placeholder.com/300?text=No+Image'}
-                          alt={item.productName}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                          onError={(e) => {
-                            e.target.src = 'https://via.placeholder.com/300?text=No+Image';
-                          }}
-                        />
-                      </div>
-
-                      <div className="flex-grow space-y-4">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3">
-                          <div className="flex-grow">
-                            <h3 className="font-medium text-base sm:text-lg text-secondary mb-2 leading-tight">
-                              <Link to={`/product/${item.productSlug}`}>{item.productName}</Link>
-                            </h3>
-                            <p className="text-xs sm:text-sm text-secondary/60 capitalize bg-gradient-to-r from-gray-100/70 to-gray-100/50 px-3 py-1.5 rounded-full inline-block font-medium">
-                              {item.variant ? `${item.variant.size || ''} ${item.variant.scentIntensity || ''}` : item.category || 'Uncategorized'}
-                            </p>
-                          </div>
-                          <div className="text-left sm:text-right">
-                            <p className="font-semibold text-lg sm:text-xl text-secondary">{formatPrice(item.price)}</p>
-                            <p className="text-xs sm:text-sm text-secondary/60 mt-1">per item</p>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                          <div className="flex items-center bg-gradient-to-r from-gray-50 to-gray-50/70 rounded-2xl border border-gray-200/50 overflow-hidden shadow-sm">
-                            <button
-                              onClick={() => handleUpdateQuantity(item._id, item.quantity - 1)}
-                              className="p-2.5 sm:p-3 hover:bg-gray-100 transition-colors flex items-center justify-center text-secondary/80 hover:text-secondary disabled:opacity-50 disabled:cursor-not-allowed"
-                              disabled={item.quantity <= 1}
-                            >
-                              <Minus size={16} />
-                            </button>
-                            <div className="px-4 sm:px-6 py-2.5 sm:py-3 min-w-[60px] text-center font-semibold text-secondary border-x border-gray-200/50 bg-white">
-                              {item.quantity}
-                            </div>
-                            <button
-                              onClick={() => handleUpdateQuantity(item._id, item.quantity + 1)}
-                              className="p-2.5 sm:p-3 hover:bg-gray-100 transition-colors flex items-center justify-center text-secondary/80 hover:text-secondary"
-                            >
-                              <Plus size={16} />
-                            </button>
-                          </div>
-
-                          <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-4 sm:gap-6">
-                            <div className="text-left sm:text-right">
-                              <p className="text-xs sm:text-sm text-secondary/60 font-medium">Subtotal</p>
-                              <p className="font-bold text-base sm:text-lg text-secondary">{formatPrice(item.total)}</p>
-                            </div>
-                            <button
-                              onClick={() => handleRemoveItem(item._id)}
-                              className="p-2.5 text-secondary/40 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all duration-200 flex items-center justify-center group/remove border border-transparent hover:border-red-100"
-                              title="Remove item"
-                            >
-                              <Trash2 size={18} className="group-hover/remove:scale-110 transition-transform" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
+    <div className="bg-slate-50 min-h-screen">
+      <div className="container max-w-7xl px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10 lg:mb-12">
+          <h1 className="font-heading text-4xl lg:text-5xl text-slate-900">Your Cart</h1>
+          <p className="text-slate-500 mt-2 text-lg">You have {cart.items.length} {cart.items.length === 1 ? 'item' : 'items'} in your cart.</p>
+        </motion.div>
+        
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8 lg:gap-12">
+          <div className="xl:col-span-2 bg-white rounded-3xl shadow-sm border border-slate-100 divide-y divide-slate-100">
+             <AnimatePresence>
+                {cart.items.map((item) => (
+                    <CartItem key={item._id} item={item} onUpdate={updateCartItem} onRemove={removeFromCart} />
                 ))}
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div initial="hidden" animate="visible" variants={scaleIn} className="xl:col-span-1">
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100/50 overflow-hidden backdrop-blur-sm xl:sticky xl:top-24">
-              <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-b border-gray-100/50 bg-gradient-to-r from-gray-50/50 to-gray-50/30">
-                <h2 className="font-heading text-lg sm:text-xl text-secondary">Order Summary</h2>
-              </div>
-
-              <div className="p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8">
-                <div className="space-y-4 sm:space-y-5">
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-secondary/70 font-medium">Subtotal</span>
-                    <span className="font-semibold text-secondary text-lg">{formatPrice(cart.subtotal)}</span>
-                  </div>
-                  {cart.discount > 0 && (
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-secondary/70 font-medium">Discount ({cart.coupon?.code})</span>
-                      <span className="font-semibold text-emerald-600">-{formatPrice(cart.discount)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-secondary/70 font-medium">Shipping</span>
-                    <span className="text-secondary/60 text-sm italic">Calculated at checkout</span>
-                  </div>
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100/50 rounded-2xl p-4 backdrop-blur-sm"
-                  >
-                    <p className="text-sm text-blue-700 font-medium">
-                      Shipping fee will be calculated during checkout after providing your address.
-                    </p>
-                  </motion.div>
-                </div>
-
-                <div className="border-t border-gray-200/50 pt-6 sm:pt-8">
-                  <div className="flex justify-between items-center mb-6 sm:mb-8">
-                    <span className="font-bold text-lg sm:text-xl text-secondary">Total</span>
-                    <span className="font-bold text-2xl sm:text-3xl text-secondary bg-gradient-to-r from-secondary to-secondary/80 bg-clip-text">
-                      {formatPrice(cart.total)}
-                    </span>
-                  </div>
-
-                  <Button
-                    asChild
-                    className="w-full h-12 sm:h-14 text-base font-semibold rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300"
-                  >
-                    <Link to="/checkout" className="flex items-center justify-center gap-3">
-                      Secure Checkout
-                      <ArrowRight size={20} />
-                    </Link>
-                  </Button>
-                </div>
-
-                <div className="pt-6 sm:pt-8 border-t border-gray-200/50">
-                  <p className="text-xs sm:text-sm text-secondary/60 mb-4 font-semibold">Secure Payment</p>
-                  <div className="flex gap-2 sm:gap-3 mb-4">
-                    <div className="w-12 sm:w-14 h-8 sm:h-9 bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg flex items-center justify-center shadow-sm">
-                      <span className="text-white text-xs font-bold">VISA</span>
-                    </div>
-                    <div className="w-12 sm:w-14 h-8 sm:h-9 bg-gradient-to-r from-red-500 to-yellow-500 rounded-lg flex items-center justify-center shadow-sm">
-                      <span className="text-white text-xs font-bold">MC</span>
-                    </div>
-                    <div className="w-12 sm:w-14 h-8 sm:h-9 bg-gradient-to-r from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <span className="text-white text-xs font-bold">AMEX</span>
-                    </div>
-                    <div className="w-12 sm:w-14 h-8 sm:h-9 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-sm">
-                      <span className="text-white text-xs font-bold">PP</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-secondary/50 leading-relaxed">
-                    🔒 Bank-level encryption protects your payment information
-                  </p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+            </AnimatePresence>
+          </div>
+          
+          <div className="xl:col-span-1">
+              <OrderSummary cart={cart} />
+          </div>
         </div>
       </div>
     </div>

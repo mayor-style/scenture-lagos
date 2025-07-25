@@ -1,104 +1,88 @@
+// src/components/product/ProductCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag, Plus } from 'lucide-react';
+import { ShoppingBag } from 'lucide-react';
+
 import { Card, CardContent, CardFooter } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { formatPrice } from '../../lib/utils';
 import { useCart } from '../../contexts/CartContext';
-import { useToast } from '../ui/Toast';
 
-const ProductCard = ({ product }) => {
-  const { addToast } = useToast();
+// Memoize the component to prevent unnecessary re-renders.
+const ProductCard = React.memo(({ product }) => {
   const { addToCart } = useCart();
-  // Select the image with isMain: true, or fall back to the first image, or placeholder
-  const productImg =
-    product.images && product.images.length > 0
-      ? product.images.find((img) => img.isMain)?.url || product.images[0].url
-      : 'https://via.placeholder.com/300?text=No+Image';
 
-  const handleAddToCart = async (e) => {
+  // Robustly select the main image URL.
+  const mainImage = product.images?.find(img => img.isMain) || product.images?.[0];
+  const productImgUrl = mainImage?.url || 'https://via.placeholder.com/400?text=Scenture';
+
+  const handleAddToCart = (e) => {
     e.preventDefault();
-    try {
-      await addToCart(
-        {
-          id: product.id,
-          name: product.name,
-          price: product.price,
-          image: productImg,
-          category: product.category,
-          slug: product.slug,
-          sku: product.sku || `SKU-${product.id}`,
-        },
-        1
-      );
-    } catch (err) {
-      // Error is handled by CartContext
-    }
+    addToCart({
+        id: product._id,
+        name: product.name,
+        price: product.price,
+        image: productImgUrl,
+        category: product.category?.name || 'Uncategorized',
+        slug: product.slug,
+        sku: product.sku || `SKU-${product._id}`,
+      },
+      1
+    );
   };
 
+  if (!product) {
+    return null; // Or a placeholder, to prevent errors if product is undefined
+  }
+
   return (
-    <Card
-      className="overflow-hidden transition-all duration-300 hover:shadow-md hover:shadow-neutral-200/50 group border-neutral-200 hover:border-neutral-300 bg-white rounded-lg"
+    <Card 
+      className="group relative flex flex-col h-full overflow-hidden rounded-lg border border-neutral-200 bg-white transition-all duration-300 ease-in-out hover:shadow-xl hover:border-transparent hover:-translate-y-1"
       role="article"
-      aria-label={`Product card for ${product.name}`}
+      aria-label={`Product: ${product.name}`}
     >
-      <Link to={`/product/${product.slug}`} className="block relative" tabIndex={0}>
-        <div className="relative aspect-square overflow-hidden bg-neutral-100">
+      <Link to={`/product/${product.slug}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-900 rounded-t-lg">
+        <div className="aspect-square overflow-hidden bg-neutral-100">
           <img
-            src={productImg}
-            alt={`Main image of ${product.name}`}
-            className="object-cover w-full h-full transition-all duration-300 group-hover:scale-[1.02] group-hover:brightness-105"
+            src={productImgUrl}
+            alt={`Image of ${product.name}`}
+            className="w-full h-full object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
             loading="lazy"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
         </div>
-        <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-neutral-300 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
       </Link>
 
-      <CardContent className="pt-6 pb-4 px-6">
-        <div className="space-y-3">
-          <span className="inline-block px-3 py-1 text-sm text-neutral-600 bg-neutral-50 rounded-full uppercase tracking-wide font-medium border border-neutral-100">
-            {product.category}
+      <CardContent className="pt-5 px-5 flex-grow flex flex-col">
+        {product.category?.name && (
+          <span className="text-xs text-neutral-500 uppercase tracking-wider mb-2">
+            {product.category.name}
           </span>
-
-          <Link
-            to={`/product/${product.slug}`}
-            className="block group/link focus:outline-none focus:ring-2 focus:ring-neutral-300 rounded"
-          >
-            <h3 className="font-heading text-xl lg:text-2xl text-neutral-900 group-hover/link:text-neutral-700 transition-colors duration-200 leading-tight tracking-tight">
-              {product.name}
-            </h3>
-          </Link>
-
-          <div className="pt-1">
-            <span className="text-xl font-light text-neutral-900 tracking-tight">
-              {formatPrice(product.price)}
-            </span>
-          </div>
-        </div>
+        )}
+        <Link to={`/product/${product.slug}`} className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-900 rounded">
+          <h3 className="font-heading text-lg text-neutral-800 leading-tight transition-colors group-hover:text-black">
+            {product.name}
+          </h3>
+        </Link>
       </CardContent>
 
-      <CardFooter className="pt-0 px-6 pb-6">
-        <Button
-          variant="outline"
-          className="w-full group/btn relative overflow-hidden flex items-center justify-center gap-2 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 transition-all duration-300 py-3 rounded-full border-neutral-300 font-medium text-neutral-700 hover:shadow-md"
-          onClick={handleAddToCart}
-          aria-label={`Add ${product.name} to cart`}
-        >
-          <div className="absolute inset-0 bg-neutral-900 translate-y-full group-hover/btn:translate-y-0 transition-transform duration-300 rounded-full"></div>
-          <ShoppingBag
-            size={16}
-            className="relative z-10 transition-transform duration-300 group-hover/btn:scale-110"
-          />
-          <span className="relative z-10">Add to Cart</span>
-          <Plus
-            size={14}
-            className="relative z-10 opacity-0 group-hover/btn:opacity-100 transition-all duration-300 transform translate-x-2 group-hover/btn:translate-x-0"
-          />
-        </Button>
+      <CardFooter className="px-5 pb-5 pt-2 mt-auto">
+        <div className="flex justify-between items-center w-full">
+          <span className="text-lg font-medium text-neutral-900">
+            {formatPrice(product.price)}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-full w-10 h-10 shrink-0 border-neutral-300 text-neutral-600 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 focus-visible:ring-offset-0"
+            onClick={handleAddToCart}
+            aria-label={`Add ${product.name} to cart`}
+          >
+            <ShoppingBag size={18} />
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );
-};
+});
 
 export default ProductCard;

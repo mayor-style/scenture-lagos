@@ -1,3 +1,4 @@
+// src/components/admin/dashboard/SalesOverviewChart.jsx
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../ui/Card';
@@ -15,7 +16,7 @@ const CustomTooltip = ({ active, payload, label }) => {
           </div>
           <div className="flex flex-col space-y-1">
             <span className="text-xs uppercase text-muted-foreground">Sales</span>
-            <span className="text-sm font-semibold text-primary">{formatPrice(payload[0].value, { notation: 'compact' })}</span>
+            <span className="text-sm font-semibold text-primary">{formatPrice(payload[0].value)}</span>
           </div>
         </div>
       </div>
@@ -25,6 +26,26 @@ const CustomTooltip = ({ active, payload, label }) => {
 };
 
 export const SalesOverviewChart = ({ data }) => {
+  // --- FIX: Added guard clause ---
+  // This prevents the component from crashing if 'data' is undefined or empty.
+  if (!Array.isArray(data) || data.length === 0) {
+    return (
+      <Card className="border-primary/20 bg-background">
+        <CardHeader className="p-5 sm:p-6">
+          <CardTitle className="text-xl font-heading text-secondary">Sales Overview</CardTitle>
+          <CardDescription className="text-sm text-muted-foreground mt-1">
+            Sales performance for the selected period
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-5 sm:p-6 pt-0">
+          <div className="h-[350px] flex items-center justify-center">
+            <p className="text-muted-foreground">No sales data to display for this period.</p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   const formattedData = data.map((item) => ({
     ...item,
     name: new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),

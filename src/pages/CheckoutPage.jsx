@@ -5,7 +5,7 @@ import { ArrowLeft, CreditCard, Check, Shield, Truck, Mail, Phone, ShoppingCart 
 import { Button } from '../components/ui/Button';
 import { formatPrice } from '../lib/utils';
 import { useCart } from '../contexts/CartContext';
-import { useAuth } from '../contexts/AuthContext'; // Assuming you have an Auth context
+import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ui/Toast';
 import OrderService from '../services/order.service';
 import { NIGERIAN_STATES } from '../lib/locations';
@@ -58,7 +58,7 @@ const CheckoutProgress = ({ step, setStep }) => {
 
 const CheckoutPage = () => {
   const { cart, loading: isCartLoading, clearCart } = useCart();
-  const { user } = useAuth(); // Get authenticated user info
+  const { currentUser, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const { addToast } = useToast();
@@ -81,16 +81,16 @@ const CheckoutPage = () => {
 
   // Pre-fill form if user is logged in
   useEffect(() => {
-    if (user) {
+    if (currentUser) {
       setShippingInfo(prev => ({
         ...prev,
-        firstName: user.firstName || '',
-        lastName: user.lastName || '',
-        email: user.email || '',
-        phone: user.phone || '',
+        firstName: currentUser.firstName || currentUser.name?.split(' ')[0] || '',
+        lastName: currentUser.lastName || currentUser.name?.split(' ').slice(1).join(' ') || '',
+        email: currentUser.email || '',
+        phone: currentUser.phone || '',
       }));
     }
-  }, [user]);
+  }, [currentUser]);
   
   // Handle payment verification on redirect from Paystack
   useEffect(() => {

@@ -11,6 +11,7 @@ import NotFoundPage from './pages/NotFoundPage';
 import ScrollToTop from './components/ScrollToTop';
 import LoadingSpinner from './components/ui/LoadingSpinner';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AddCustomerPage from './pages/admin/AddCustomerPage';
 import EditCustomerPage from './pages/admin/EditCustomerPage';
 import InventoryHistory from './pages/admin/InventoryHistory';
@@ -28,10 +29,14 @@ const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
 const AboutPage = lazy(() => import('./pages/AboutPage'));
 const ContactPage = lazy(() => import('./pages/ContactPage'));
 const AccountPage = lazy(() => import('./pages/AccountPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const UnauthorizedPage = lazy(() => import('./pages/UnauthorizedPage'));
 
 // Admin pages
-const LoginPage = lazy(() => import('./pages/admin/LoginPage'));
+const AdminLoginPage = lazy(() => import('./pages/admin/LoginPage'));
 const DashboardPage = lazy(() => import('./pages/admin/DashboardPage'));
 const ProductsPage = lazy(() => import('./pages/admin/ProductsPage'));
 const ProductFormPage = lazy(() => import('./pages/admin/ProductFormPage'));
@@ -43,6 +48,9 @@ const CustomersPage = lazy(() => import('./pages/admin/CustomersPage'));
 const CustomerDetailPage = lazy(() => import('./pages/admin/CustomerDetailPage'));
 const InventoryPage = lazy(() => import('./pages/admin/InventoryPage'));
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage'));
+
+// Create a QueryClient instance
+const queryClient = new QueryClient();
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -151,6 +159,7 @@ class ErrorBoundary extends React.Component {
 const App = () => {
   return (
     <HelmetProvider>
+       <QueryClientProvider client={queryClient}>
       <Router>
         <ScrollToTop />
         <ErrorBoundary>
@@ -175,9 +184,20 @@ const App = () => {
                         <Route path="/checkout" element={<CheckoutPage />} />
                         <Route path="/about" element={<AboutPage />} />
                         <Route path="/contact" element={<ContactPage />} />
-                        <Route path="/account" element={<AccountPage />} />
+                        <Route path="/login" element={<LoginPage />} />
+                        <Route path="/register" element={<RegisterPage />} />
+                        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+                        <Route 
+                          path="/account" 
+                          element={
+                            <ProtectedRoute requiredRoles={['customer', 'admin', 'superadmin']}>
+                              <AccountPage />
+                            </ProtectedRoute>
+                          } 
+                        />
                       </Route>
-                      <Route path="/admin/login" element={<LoginPage />} />
+                      <Route path="/admin/login" element={<AdminLoginPage />} />
                       <Route path="/unauthorized" element={<UnauthorizedPage />} />
                       <Route
                         path="/admin"
@@ -216,6 +236,7 @@ const App = () => {
           </ToastProvider>
         </ErrorBoundary>
       </Router>
+      </QueryClientProvider>
     </HelmetProvider>
   );
 };

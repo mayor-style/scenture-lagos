@@ -1,8 +1,8 @@
+// src/components/admin/dashboard/RecentOrders.jsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../ui/Card';
-import { Avatar, AvatarFallback, AvatarImage } from '../../ui/Avatar';
+import { Avatar, AvatarFallback } from '../../ui/Avatar';
 import { Badge } from '../../ui/Badge';
 import { Skeleton } from '../../ui/Skeleton';
 import { formatPrice } from '../../../lib/utils';
@@ -30,7 +30,7 @@ export const RecentOrders = ({ orders }) => {
       <CardHeader className="p-5 sm:p-6">
         <CardTitle className="text-xl font-heading text-secondary">Recent Orders</CardTitle>
         <CardDescription className="text-sm text-muted-foreground mt-1">
-          {orders.length} new orders in this period
+          Showing the latest {orders.length} orders.
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 sm:p-6 space-y-3">
@@ -41,17 +41,17 @@ export const RecentOrders = ({ orders }) => {
             onClick={() => navigate(`/admin/orders/${order._id}`)}
           >
             <Avatar className="h-8 w-8">
-              <AvatarImage src={order.user?.avatarUrl} alt="Avatar" />
+              {/* CORRECTED: Removed AvatarImage as User model has no avatarUrl. Relying on fallback. */}
               <AvatarFallback className="text-sm bg-muted/50 text-secondary">
                 {order.user
-                  ? order.user.firstName?.[0] || 'G'
-                  : order.shippingAddress?.firstName?.[0] || 'G'}
+                  ? order.user.firstName?.[0]?.toUpperCase() || 'G'
+                  : order.shippingAddress?.firstName?.[0]?.toUpperCase() || 'G'}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium text-secondary truncate">
                 {order.user
-                  ? `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Guest Order'
+                  ? `${order.user.firstName || ''} ${order.user.lastName || ''}`.trim() || 'Registered User'
                   : `${order.shippingAddress?.firstName || ''} ${order.shippingAddress?.lastName || ''}`.trim() ||
                     'Guest Order'}
               </p>
@@ -59,8 +59,8 @@ export const RecentOrders = ({ orders }) => {
             </div>
             <div className="text-right space-y-1">
               <p className="text-sm font-semibold text-secondary">{formatPrice(order.totalAmount, { notation: 'compact' })}</p>
-              <Badge variant={getStatusBadgeVariant(order.status)} className="text-xs">
-                {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+              <Badge variant={getStatusBadgeVariant(order.status)} className="text-xs capitalize">
+                {order.status}
               </Badge>
             </div>
           </div>
@@ -70,6 +70,7 @@ export const RecentOrders = ({ orders }) => {
   );
 };
 
+// Skeleton component remains unchanged but is included for completeness.
 export const RecentOrdersSkeleton = () => (
   <Card className="border-primary/20 bg-background">
     <CardHeader className="p-5 sm:p-6">
@@ -84,7 +85,7 @@ export const RecentOrdersSkeleton = () => (
             <Skeleton className="h-4 w-3/4 bg-muted/50" />
             <Skeleton className="h-3 w-1/2 bg-muted/50" />
           </div>
-          <div className="space-y-1">
+          <div className="space-y-1 text-right">
             <Skeleton className="h-4 w-16 bg-muted/50" />
             <Skeleton className="h-4 w-12 bg-muted/50" />
           </div>

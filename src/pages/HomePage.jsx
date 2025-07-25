@@ -1,207 +1,147 @@
-import React, { useEffect, useState } from 'react';
+// src/pages/HomePage.jsx
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowRight, AlertTriangle } from 'lucide-react';
+
 import { Button } from '../components/ui/Button';
 import ProductCard from '../components/product/ProductCard';
 import ProductService from '../services/product.service';
 import { testimonials } from '../lib/mockData';
 
+const fadeInUp = {
+  hidden: { opacity: 0, y: 30 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.6, 0.01, 0.05, 0.95] } },
+};
+
+const staggerContainer = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.1, delayChildren: 0.2 } },
+};
+
 const HomePage = () => {
-  const [featuredProducts, setFeaturedProducts] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchFeaturedProducts = async () => {
-      setIsLoading(true);
-      const products = await ProductService.getFeaturedProducts();
-      setFeaturedProducts(products);
-      console.log('products frm Homepage', products);
-      setIsLoading(false);
-    };
-
-    fetchFeaturedProducts();
-  }, []);
-
-  // Animation variants
-  const fadeInUp = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      transition: { 
-        duration: 0.8, 
-        ease: [0.22, 1, 0.36, 1] 
-      } 
-    },
-  };
-
-  const fadeIn = {
-    hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1, 
-      transition: { 
-        duration: 0.8,
-        ease: [0.22, 1, 0.36, 1]
-      } 
-    },
-  };
-
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.15,
-        delayChildren: 0.2,
-      },
-    },
-  };
-
-  const scaleIn = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
-      scale: 1,
-      transition: { 
-        duration: 0.6,
-        ease: [0.22, 1, 0.36, 1]
-      }
-    },
-  };
+  const { 
+    data: featuredProducts, 
+    isLoading, 
+    isError,
+    error 
+  } = useQuery({
+    queryKey: ['featuredProducts'], // A unique key to identify and cache this data
+    queryFn: () => ProductService.getFeaturedProducts(4), // The function that fetches the data
+    // --- Caching Configuration ---
+    staleTime: 1000 * 60 * 5,   // Data is considered "fresh" for 5 minutes. No network request will be made for this key in that time.
+    gcTime: 1000 * 60 * 30, // Data is kept in the cache for 30 minutes even if unused, then "garbage collected".
+  });
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col bg-white">
       {/* Hero Section */}
-      <section className="relative min-h-[95vh] bg-gradient-to-br from-neutral-50 via-white to-neutral-100 flex items-center overflow-hidden">
+      <section className="relative min-h-[95vh] flex items-center justify-start text-left overflow-hidden">
         <div className="absolute inset-0 z-0">
-          <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/60 to-transparent z-10"></div>
-          <img
-            src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1032&q=80"
-            alt="Luxury Fragrance"
-            className="w-full h-full object-cover opacity-20"
-          />
+         <img
+          src="https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&auto=format&fit=crop&w=1032&q=80"
+          alt="Artistic display of luxury fragrance bottles"
+          className="w-full h-full object-cover"
+        />
+          <div className="absolute inset-0 bg-black/40 bg-gradient-to-r from-black/60 to-transparent" />
         </div>
         
-        <div className="absolute top-20 right-20 w-32 h-32 border border-neutral-200/40 rounded-full"></div>
-        <div className="absolute bottom-40 right-40 w-16 h-16 bg-neutral-100/60 rounded-full"></div>
-        
-        <div className="container relative z-20 px-6 lg:px-12">
+        <div className="container relative z-10 px-6 lg:px-12">
           <motion.div
             initial="hidden"
             animate="visible"
-            variants={fadeInUp}
-            className="max-w-3xl"
+            variants={staggerContainer}
+            className="max-w-2xl text-white"
           >
-            <motion.div 
-              variants={fadeIn}
-              className="inline-flex items-center px-4 py-2 bg-white/80 backdrop-blur-sm border border-neutral-200/50 rounded-full text-sm text-neutral-600 mb-8"
-            >
-              ✨ Premium Fragrance Collection
+            <motion.div variants={fadeInUp}>
+              <span className="inline-block px-4 py-2 text-sm bg-white/10 backdrop-blur-sm border border-white/20 rounded-full mb-6">
+                ✨ Premium Fragrance Collection
+              </span>
             </motion.div>
-            
-            <h1 className="font-heading text-5xl md:text-6xl lg:text-7xl mb-8 leading-[1.1] tracking-tight">
-              <span className="block text-neutral-900">Scenture Lagos</span>
-              <span className="block text-neutral-500 font-light">Where Luxury</span>
-              <span className="block text-neutral-900">Meets Lifestyle</span>
-            </h1>
-            
-            <p className="text-xl md:text-2xl mb-12 text-neutral-600 font-light leading-relaxed max-w-2xl">
-              Elevate your senses and spaces with our premium fragrances and diffusers. 
-              Crafted with passion, designed for distinction.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button asChild size="lg" className="group bg-neutral-900 hover:bg-neutral-800 text-white px-8 py-4 rounded-full transition-all duration-300">
+            <motion.h1
+              variants={fadeInUp}
+              className="font-heading text-5xl md:text-6xl lg:text-7xl mb-6 leading-tight tracking-tighter"
+            >
+              Scenture Lagos<span className="text-neutral-300">.</span>
+            </motion.h1>
+            <motion.p 
+              variants={fadeInUp}
+              className="text-xl md:text-2xl mb-10 text-neutral-200 font-light max-w-xl"
+            >
+              Elevate your senses and spaces with our premium fragrances. Crafted with passion, designed for distinction.
+            </motion.p>
+            <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4">
+              <Button asChild size="lg" className="group">
                 <Link to="/shop" className="flex items-center">
-                  <span>Explore Collections</span>
+                  Explore Collections
                   <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
                 </Link>
               </Button>
-              
-              <Button asChild variant="outline" size="lg" className="px-8 py-4 rounded-full border-neutral-300 hover:bg-neutral-50">
-                <Link to="/about">
-                  Our Story
-                </Link>
+              <Button asChild variant="secondary" size="lg">
+                <Link to="/about">Our Story</Link>
               </Button>
-            </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
 
       {/* Featured Products Section */}
-      <section className="py-24 lg:py-32 bg-white">
+      <section className="py-24 lg:py-32">
         <div className="container px-6 lg:px-12">
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: "-150px" }}
+            viewport={{ once: true, amount: 0.3 }}
             variants={fadeInUp}
-            className="text-center mb-20"
+            className="text-center mb-16"
           >
-            <div className="inline-flex items-center px-4 py-2 bg-neutral-100 rounded-full text-sm text-neutral-600 mb-6">
-              Featured Collections
-            </div>
-            <h2 className="font-heading text-4xl md:text-5xl lg:text-6xl mb-6 text-neutral-900 tracking-tight">
-              Discover Our Most
-              <span className="block text-neutral-500 font-light">Coveted Scents</span>
+            <h2 className="font-heading text-4xl md:text-5xl mb-4 text-neutral-900 tracking-tight">
+              Discover Our Coveted Scents
             </h2>
-            <p className="text-lg text-neutral-600 max-w-2xl mx-auto leading-relaxed">
-              Each fragrance is meticulously crafted to transform your space into a sanctuary of luxury and distinction.
+            <p className="text-lg text-neutral-600 max-w-2xl mx-auto">
+              Each fragrance is meticulously crafted to transform your space into a sanctuary of luxury.
             </p>
           </motion.div>
-
-          {isLoading ? (
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={staggerContainer}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10 mb-16"
-            >
-              {[...Array(4)].map((_, index) => (
-                <motion.div key={index} variants={scaleIn}>
-                  <div className="animate-pulse">
-                    <div className="aspect-square bg-neutral-200 rounded-lg mb-4"></div>
-                    <div className="h-4 bg-neutral-200 rounded w-3/4 mb-2"></div>
-                    <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
-                  </div>
-                </motion.div>
-              ))}
-            </motion.div>
-          ) : (
-            <motion.div
-              initial="hidden"
-              whileInView="visible"
-              viewport={{ once: true, margin: "-100px" }}
-              variants={staggerContainer}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-10 mb-16"
-            >
-              {featuredProducts.map((product) => (
-                <motion.div key={product._id} variants={scaleIn}>
-                  <ProductCard
-                    product={{
-                      id: product._id,
-                      name: product.name,
-                      price: product.price,
-                      images: product.images,
-                      category: product.category?.name || 'Uncategorized',
-                      slug:product.slug,
-                    }}
-                  />
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
+          
+          <motion.div
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, amount: 0.1 }}
+            variants={staggerContainer}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 mb-16"
+          >
+            {isLoading && [...Array(4)].map((_, index) => (
+              <motion.div key={index} variants={fadeInUp}>
+                <div className="animate-pulse">
+                  <div className="aspect-square bg-neutral-200 rounded-lg mb-4"></div>
+                  <div className="h-4 bg-neutral-200 rounded w-3/4 mb-2"></div>
+                  <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
+                </div>
+              </motion.div>
+            ))}
+            {isError && (
+              <div className="col-span-full flex flex-col items-center justify-center bg-red-50 text-red-700 p-8 rounded-lg border border-red-200">
+                  <AlertTriangle className="w-10 h-10 mb-4" />
+                  <h3 className="text-xl font-semibold mb-2">Something went wrong</h3>
+                  <p>{error.message}</p>
+              </div>
+            )}
+            {featuredProducts && featuredProducts.map((product) => (
+              <motion.div key={product._id} variants={fadeInUp}>
+                <ProductCard product={product} />
+              </motion.div>
+            ))}
+          </motion.div>
 
           <motion.div
             initial="hidden"
             whileInView="visible"
-            viewport={{ once: true, margin: "-100px" }}
-            variants={fadeIn}
+            viewport={{ once: true, amount: 0.8 }}
+            variants={fadeInUp}
             className="text-center"
           >
-            <Button asChild variant="outline" size="lg" className="px-8 py-4 rounded-full border-neutral-300 hover:bg-neutral-50">
+            <Button asChild variant="outline" size="lg">
               <Link to="/shop">View All Products</Link>
             </Button>
           </motion.div>
@@ -216,7 +156,7 @@ const HomePage = () => {
               initial="hidden"
               whileInView="visible"
               viewport={{ once: true, margin: "-100px" }}
-              variants={scaleIn}
+              variants={fadeInUp}
               className="relative"
             >
               <div className="aspect-[4/5] overflow-hidden bg-neutral-200">
@@ -297,7 +237,7 @@ const HomePage = () => {
             {testimonials.map((testimonial) => (
               <motion.div
                 key={testimonial.id}
-                variants={scaleIn}
+                variants={fadeInUp}
                 className="bg-white p-8 lg:p-10 border border-neutral-200 hover:border-neutral-300 transition-all duration-300 group"
               >
                 <div className="flex items-center mb-6">

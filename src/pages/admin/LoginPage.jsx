@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Lock, User, LogIn } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
-const LoginPage = () => {
+const AdminLoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { adminLogin, loading, error: authError } = useAuth();
@@ -177,4 +177,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage;
+export default AdminLoginPage;

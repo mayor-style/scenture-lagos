@@ -8,12 +8,12 @@ import LoadingSpinner from '../ui/LoadingSpinner';
  * @param {Object} props - Component props
  * @param {React.ReactNode} props.children - Child components to render if authenticated
  * @param {string|string[]} [props.requiredRoles] - Optional roles required to access the route
- * @param {string} [props.redirectTo='/admin/login'] - Path to redirect to if not authenticated
+ * @param {string} [props.redirectTo] - Path to redirect to if not authenticated
  */
 const ProtectedRoute = ({
   children,
   requiredRoles,
-  redirectTo = '/admin/login'
+  redirectTo
 }) => {
   const { currentUser, loading, hasRole } = useAuth();
   const location = useLocation();
@@ -29,7 +29,14 @@ const ProtectedRoute = ({
 
   // Redirect to login if not authenticated
   if (!currentUser) {
-    return <Navigate to={redirectTo} state={{ from: location }} replace />;
+    // Determine the appropriate login page based on required roles
+    const loginPath = redirectTo || (
+      requiredRoles && 
+      (requiredRoles.includes('admin') || requiredRoles.includes('superadmin')) && 
+      !requiredRoles.includes('customer')
+    ) ? '/admin/login' : '/login';
+    
+    return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
   // Check role requirements if specified

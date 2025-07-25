@@ -1,454 +1,268 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Filter, ChevronDown, Grid3X3 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Filter, X, ChevronDown, AlertCircle, ShoppingBag } from 'lucide-react';
+
+import ProductService from '../services/product.service';
 import ProductCard from '../components/product/ProductCard';
 import { Button } from '../components/ui/Button';
-import ProductService from '../services/product.service';
 
-const ShopPage = () => {
+// --- Reusable Components ---
+
+const SkeletonCard = () => (
+  <div className="animate-pulse">
+    <div className="aspect-square bg-neutral-200 rounded-lg mb-4"></div>
+    <div className="h-4 bg-neutral-200 rounded w-3/4 mb-2"></div>
+    <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
+  </div>
+);
+
+const EmptyState = ({ onClear }) => (
+  <div className="col-span-full flex flex-col items-center justify-center text-center py-20">
+    <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-6">
+      <ShoppingBag className="w-8 h-8 text-neutral-400" />
+    </div>
+    <h3 className="font-heading text-2xl text-neutral-900 mb-2">No Products Found</h3>
+    <p className="text-neutral-600 mb-6 max-w-sm">
+      Your search or filter combination returned no results. Try adjusting your criteria or view all products.
+    </p>
+    <Button onClick={onClear}>View All Products</Button>
+  </div>
+);
+
+const ErrorState = ({ error, onRetry }) => (
+  <div className="col-span-full flex flex-col items-center justify-center text-center py-20 bg-red-50/50 rounded-lg">
+    <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
+    <h3 className="font-heading text-2xl text-red-800 mb-2">Something Went Wrong</h3>
+    <p className="text-red-700 mb-6 max-w-md">{error?.message || 'Failed to load products. Please check your connection.'}</p>
+    <Button onClick={onRetry} variant="destructive">Try Again</Button>
+  </div>
+);
+
+// --- Main Shop Page Component ---
+
+export default function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [products, setProducts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [totalProducts, setTotalProducts] = useState(0);
-  const [page, setPage] = useState(1);
-  const [limit] = useState(12);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [sortOption, setSortOption] = useState('featured');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Get category from URL params
-  const categoryParam = searchParams.get('category');
-
-  // Animation variants
-  const fadeInUp = {
-    hidden: { opacity: 0, y: 30 },
-    visible: { 
-      opacity: 1, 
-      y: 0, 
-      transition: { 
-        duration: 0.8, 
-        ease: [0.22, 1, 0.36, 1] 
-      } 
-    },
+  // --- State derived from URL ---
+  const filters = {
+    page: Number(searchParams.get('page')) || 1,
+    sort: searchParams.get('sort') || 'featured',
+    category: searchParams.get('category') || 'all',
+    limit: 12,
   };
 
-  const fadeIn = {
-    hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1, 
-      transition: { 
-        duration: 0.6,
-        ease: [0.22, 1, 0.36, 1]
-      } 
-    },
-  };
-
-  const staggerContainer = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.1,
-        delayChildren: 0.2,
-      },
-    },
-  };
-
-  const scaleIn = {
-    hidden: { opacity: 0, scale: 0.95 },
-    visible: { 
-      opacity: 1, 
-      scale: 1,
-      transition: { 
-        duration: 0.5,
-        ease: [0.22, 1, 0.36, 1]
+  // --- Handlers to update URL search params ---
+  const updateFilters = (newFilters) => {
+    const newParams = new URLSearchParams(searchParams);
+    Object.entries(newFilters).forEach(([key, value]) => {
+      if (value) {
+        newParams.set(key, value);
+      } else {
+        newParams.delete(key);
       }
-    },
-  };
-
-  const slideDown = {
-    hidden: { height: 0, opacity: 0 },
-    visible: { 
-      height: 'auto', 
-      opacity: 1,
-      transition: { 
-        duration: 0.4,
-        ease: [0.22, 1, 0.36, 1]
-      }
-    },
-    exit: { 
-      height: 0, 
-      opacity: 0,
-      transition: { 
-        duration: 0.3,
-        ease: [0.22, 1, 0.36, 1]
-      }
+    });
+    // Reset page on filter change
+    if (newFilters.category || newFilters.sort) {
+      newParams.set('page', '1');
     }
-  };
-
-  // Fetch products and categories
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Fetch categories
-        const categoriesData = await ProductService.getCategories();
-        setCategories([{ slug: 'all', name: 'All Categories' }, ...categoriesData]);
-
-        // Fetch products
-        const params = {
-          page,
-          limit,
-          sort: sortOption,
-          category: categoryParam || (selectedCategory !== 'all' ? selectedCategory : undefined),
-        };
-        const { data, pagination } = await ProductService.getProducts(params);
-        setProducts(data.map(product => ({
-          id: product._id,
-          name: product.name,
-          price: product.price,
-          images: product.images,
-          category: product.category?.name || 'Uncategorized',
-          slug:product.slug,
-        })));
-        setTotalProducts(pagination.total);
-        setSelectedCategory(categoryParam || 'all');
-      } catch (err) {
-        setError('Failed to load products or categories. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchData();
-  }, [page, sortOption, categoryParam, selectedCategory, limit]);
-
-  // Handle category change
-  const handleCategoryChange = (categorySlug) => {
-    setSelectedCategory(categorySlug);
-    setPage(1); // Reset to first page
-    if (categorySlug === 'all') {
-      searchParams.delete('category');
-    } else {
-      searchParams.set('category', categorySlug);
-    }
-    setSearchParams(searchParams);
-  };
-
-  // Handle sort change
-  const handleSortChange = (e) => {
-    setSortOption(e.target.value);
-    setPage(1); // Reset to first page
-  };
-
-  // Handle page change
-  const handlePageChange = (newPage) => {
-    setPage(newPage);
+    setSearchParams(newParams, { replace: true });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Toggle filter visibility on mobile
-  const toggleFilter = () => {
-    setIsFilterOpen(!isFilterOpen);
+  const handleCategoryChange = (slug) => updateFilters({ category: slug === 'all' ? null : slug });
+  const handleSortChange = (e) => updateFilters({ sort: e.target.value });
+  const handlePageChange = (newPage) => updateFilters({ page: newPage });
+  const clearFilters = () => setSearchParams({}, { replace: true });
+
+  // --- Data Fetching with TanStack Query ---
+  const { data: categoriesData, isLoading: isLoadingCategories } = useQuery({
+    queryKey: ['categories'],
+    queryFn: ProductService.getCategories,
+    staleTime: 1000 * 60 * 60, // Cache categories for 1 hour
+  });
+  const categories = [{ slug: 'all', name: 'All Categories' }, ...(categoriesData || [])];
+
+  const { data: productsData, isLoading, isError, error, isFetching } = useQuery({
+    queryKey: ['products', filters], // Query key includes filters, so it refetches when they change
+    queryFn: () => ProductService.getProducts(filters),
+    placeholderData: (previousData) => previousData, // Keep old data visible while new data is fetching
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+
+  // --- Animation Variants ---
+  const staggerContainer = {
+    hidden: {},
+    visible: { transition: { staggerChildren: 0.05 } },
+  };
+  const fadeInUp = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } },
   };
 
-  // Calculate total pages
-  const totalPages = Math.ceil(totalProducts / limit);
+  // --- Render Logic ---
+  const totalPages = productsData?.pagination?.totalPages || 1;
+  const currentCategoryName = categories.find(c => c.slug === filters.category)?.name || 'All Categories';
 
   return (
-    <div className="bg-white min-h-screen">
-      {/* Hero Section */}
-      <section className="bg-gradient-to-br from-neutral-50 via-white to-neutral-100 py-16 lg:py-24">
-        <div className="container px-6 lg:px-12">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={fadeInUp}
-            className="max-w-4xl"
-          >
-            <div className="inline-flex items-center px-4 py-2 bg-white border border-neutral-200 rounded-full text-sm text-neutral-600 mb-8">
-              ✨ Premium Collection
-            </div>
-            
-            <h1 className="font-heading text-4xl md:text-5xl lg:text-6xl mb-6 text-neutral-900 tracking-tight leading-[1.1]">
-              Shop Our
-              <span className="block text-neutral-500 font-light">Curated Collection</span>
-            </h1>
-            
-            <p className="text-xl text-neutral-600 max-w-3xl leading-relaxed">
-              Explore our meticulously curated selection of premium fragrances, candles, and diffusers. 
-              Each product is crafted with the finest ingredients to elevate your space and senses.
-            </p>
-          </motion.div>
-        </div>
+    <div className="bg-white">
+      {/* Page Header */}
+      <section className="bg-neutral-50 border-b border-neutral-200/80 py-16 lg:py-20">
+        <motion.div
+          initial="hidden"
+          animate="visible"
+          variants={fadeInUp}
+          className="container px-6 text-center"
+        >
+          <h1 className="font-heading text-4xl md:text-5xl text-neutral-900 tracking-tight">
+            Our Collection
+          </h1>
+          <p className="mt-4 text-lg text-neutral-600 max-w-2xl mx-auto">
+            Discover meticulously crafted fragrances and diffusers designed to elevate your everyday.
+          </p>
+        </motion.div>
       </section>
 
-      <div className="container px-6 lg:px-12 py-12 lg:py-16">
-        <div className="flex flex-col lg:flex-row gap-12 lg:gap-16">
-          {/* Filter Sidebar - Desktop */}
-          <motion.aside 
-            initial="hidden"
-            animate="visible"
-            variants={fadeIn}
-            className="hidden lg:block w-72 flex-shrink-0"
-          >
-            <div className="sticky top-24">
-              <div className="bg-white border border-neutral-200 p-8">
-                <h2 className="font-heading text-2xl mb-8 text-neutral-900 tracking-tight">Categories</h2>
-                <ul className="space-y-2">
-                  {categories.map((category) => (
-                    <li key={category.slug}>
+      <div className="container px-6 py-12 lg:py-16">
+        <div className="flex flex-col lg:flex-row gap-12">
+          {/* Desktop Filter Sidebar */}
+          <aside className="hidden lg:block w-72 flex-shrink-0">
+            <div className="sticky top-28 space-y-8">
+              <div>
+                <h3 className="font-semibold text-sm tracking-wider uppercase text-neutral-800 mb-4">Categories</h3>
+                <ul className="space-y-1">
+                  {categories.map((cat) => (
+                    <li key={cat.slug}>
                       <button
-                        onClick={() => handleCategoryChange(category.slug)}
-                        className={`text-left w-full py-3 px-4 rounded-full transition-all duration-300 text-sm font-medium ${
-                          selectedCategory === category.slug 
-                            ? 'bg-neutral-900 text-white' 
-                            : 'hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900'
+                        onClick={() => handleCategoryChange(cat.slug)}
+                        className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                          filters.category === cat.slug
+                            ? 'bg-neutral-100 font-semibold text-neutral-900'
+                            : 'text-neutral-600 hover:bg-neutral-100/60 hover:text-neutral-900'
                         }`}
                       >
-                        {category.name}
+                        {cat.name}
                       </button>
                     </li>
                   ))}
                 </ul>
               </div>
             </div>
-          </motion.aside>
-
-          {/* Mobile Filter Toggle */}
-          <div className="lg:hidden">
-            <Button 
-              onClick={toggleFilter} 
-              variant="outline" 
-              className="w-full flex items-center justify-between py-4 px-6 rounded-full border-neutral-300 hover:bg-neutral-50 transition-all duration-300"
-            >
-              <span className="flex items-center font-medium">
-                <Filter size={18} className="mr-3" />
-                Filter & Sort
-              </span>
-              <ChevronDown 
-                size={18} 
-                className={`transition-transform duration-300 ${isFilterOpen ? 'rotate-180' : ''}`} 
-              />
-            </Button>
-            
-            {isFilterOpen && (
-              <motion.div 
-                initial="hidden"
-                animate="visible"
-                exit="exit"
-                variants={slideDown}
-                className="mt-4 border border-neutral-200 bg-white overflow-hidden"
-              >
-                <div className="p-6">
-                  <div className="mb-8">
-                    <h3 className="font-heading text-lg mb-4 text-neutral-900">Categories</h3>
-                    <div className="grid grid-cols-2 gap-2">
-                      {categories.map((category) => (
-                        <button
-                          key={category.slug}
-                          onClick={() => handleCategoryChange(category.slug)}
-                          className={`text-left py-3 px-4 text-sm transition-all duration-300 rounded-full font-medium ${
-                            selectedCategory === category.slug 
-                              ? 'bg-neutral-900 text-white' 
-                              : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600'
-                          }`}
-                        >
-                          {category.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="font-heading text-lg mb-4 text-neutral-900">Sort By</h3>
-                    <select
-                      value={sortOption}
-                      onChange={handleSortChange}
-                      className="w-full p-4 border border-neutral-300 focus:border-neutral-500 focus:outline-none bg-white rounded-full font-medium text-neutral-700 transition-all duration-300"
-                    >
-                      <option value="featured">Featured</option>
-                      <option value="price-low-high">Price: Low to High</option>
-                      <option value="price-high-low">Price: High to Low</option>
-                      <option value="newest">Newest</option>
-                    </select>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </div>
+          </aside>
 
           {/* Main Content */}
-          <div className="flex-grow">
-            {/* Sort - Desktop */}
-            <motion.div 
-              initial="hidden"
-              animate="visible"
-              variants={fadeIn}
-              className="hidden lg:flex justify-between items-center mb-12 pb-6 border-b border-neutral-200"
-            >
-              <div className="flex items-center space-x-4">
-                <p className="text-neutral-600 font-medium">
-                  Showing {products.length} of {totalProducts} {totalProducts === 1 ? 'product' : 'products'}
+          <main className="flex-grow">
+            {/* Toolbar */}
+            <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-8 pb-4 border-b border-neutral-200/80">
+              <div className="flex items-center gap-4">
+                <Button onClick={() => setIsMobileFilterOpen(true)} variant="outline" className="lg:hidden flex items-center gap-2">
+                  <Filter size={16} />
+                  <span>Filter</span>
+                </Button>
+                <p className="text-sm text-neutral-600">
+                  {isFetching ? 'Loading...' : `Showing ${productsData?.data?.length || 0} of ${productsData?.pagination?.total || 0} products`}
                 </p>
-                {selectedCategory !== 'all' && (
-                  <div className="inline-flex items-center px-3 py-1 bg-neutral-100 rounded-full text-sm text-neutral-700">
-                    {categories.find(cat => cat.slug === selectedCategory)?.name || 'Category'}
-                  </div>
-                )}
               </div>
-              
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-2">
                 <label htmlFor="sort" className="text-sm font-medium text-neutral-700">Sort by:</label>
-                <select
-                  id="sort"
-                  value={sortOption}
-                  onChange={handleSortChange}
-                  className="p-3 border border-neutral-300 focus:border-neutral-500 focus:outline-none bg-white rounded-full font-medium text-neutral-700 transition-all duration-300 min-w-[180px]"
-                >
-                  <option value="featured">Featured</option>
-                  <option value="price-low-high">Price: Low to High</option>
-                  <option value="price-high-low">Price: High to Low</option>
-                  <option value="newest">Newest</option>
-                </select>
+                <div className="relative">
+                  <select
+                    id="sort"
+                    value={filters.sort}
+                    onChange={handleSortChange}
+                    className="appearance-none w-full bg-white border border-neutral-300 rounded-md py-2 pl-3 pr-8 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-800"
+                  >
+                    <option value="featured">Featured</option>
+                    <option value="price-low-high">Price: Low to High</option>
+                    <option value="price-high-low">Price: High to Low</option>
+                    <option value="newest">Newest</option>
+                  </select>
+                  <ChevronDown size={16} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+                </div>
               </div>
-            </motion.div>
+            </div>
 
             {/* Products Grid */}
-            {isLoading ? (
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={staggerContainer}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10"
-              >
-                {[...Array(limit)].map((_, index) => (
-                  <motion.div key={index} variants={scaleIn}>
-                    <div className="animate-pulse">
-                      <div className="aspect-square bg-neutral-200 rounded-lg mb-4"></div>
-                      <div className="h-4 bg-neutral-200 rounded w-3/4 mb-2"></div>
-                      <div className="h-4 bg-neutral-200 rounded w-1/2"></div>
-                    </div>
-                  </motion.div>
-                ))}
-              </motion.div>
-            ) : error ? (
-              <motion.div 
-                initial="hidden"
-                animate="visible"
-                variants={fadeInUp}
-                className="text-center py-20"
-              >
-                <div className="max-w-md mx-auto">
-                  <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Grid3X3 className="w-8 h-8 text-neutral-400" />
-                  </div>
-                  
-                  <h3 className="font-heading text-2xl text-neutral-900 mb-4">Error Loading Products</h3>
-                  <p className="text-neutral-600 mb-8 leading-relaxed">
-                    {error}
-                  </p>
-                  
-                  <Button 
-                    onClick={() => window.location.reload()} 
-                    className="bg-neutral-900 hover:bg-neutral-800 text-white px-8 py-3 rounded-full transition-all duration-300"
-                  >
-                    Try Again
-                  </Button>
-                </div>
-              </motion.div>
-            ) : products.length > 0 ? (
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={staggerContainer}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8 lg:gap-10"
-              >
-                {products.map((product) => (
-                  <motion.div key={product.id} variants={scaleIn}>
-                    <ProductCard product={product} />
-                  </motion.div>
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div 
-                initial="hidden"
-                animate="visible"
-                variants={fadeInUp}
-                className="text-center py-20"
-              >
-                <div className="max-w-md mx-auto">
-                  <div className="w-16 h-16 bg-neutral-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <Grid3X3 className="w-8 h-8 text-neutral-400" />
-                  </div>
-                  
-                  <h3 className="font-heading text-2xl text-neutral-900 mb-4">No products found</h3>
-                  <p className="text-neutral-600 mb-8 leading-relaxed">
-                    We couldn't find any products in this category. Try exploring our full collection.
-                  </p>
-                  
-                  <Button 
-                    onClick={() => handleCategoryChange('all')} 
-                    className="bg-neutral-900 hover:bg-neutral-800 text-white px-8 py-3 rounded-full transition-all duration-300"
-                  >
-                    View All Products
-                  </Button>
-                </div>
-              </motion.div>
-            )}
+            <motion.div
+              key={filters.page} // Re-trigger animation on page change
+              variants={staggerContainer}
+              initial="hidden"
+              animate="visible"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-10"
+            >
+              {isLoading && [...Array(filters.limit)].map((_, i) => <SkeletonCard key={i} />)}
+              {isError && <ErrorState error={error} onRetry={() => window.location.reload()} />}
+              {!isLoading && !isError && productsData?.data.length === 0 && <EmptyState onClear={clearFilters} />}
+              {!isLoading && !isError && productsData?.data.map((product) => (
+                <motion.div key={product._id} variants={fadeInUp}>
+                  <ProductCard product={product} />
+                </motion.div>
+              ))}
+            </motion.div>
 
             {/* Pagination */}
             {totalPages > 1 && (
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={fadeIn}
-                className="flex justify-center items-center mt-12 space-x-2"
-              >
-                <Button
-                  variant="outline"
-                  disabled={page === 1}
-                  onClick={() => handlePageChange(page - 1)}
-                  className="px-4 py-2 rounded-full border-neutral-300 hover:bg-neutral-50 disabled:opacity-50"
-                >
-                  Previous
-                </Button>
-                <div className="flex space-x-1">
-                  {[...Array(totalPages)].map((_, index) => (
-                    <Button
-                      key={index}
-                      variant={page === index + 1 ? 'default' : 'outline'}
-                      onClick={() => handlePageChange(index + 1)}
-                      className={`px-4 py-2 rounded-full ${
-                        page === index + 1 
-                          ? 'bg-neutral-900 text-white hover:bg-neutral-800' 
-                          : 'border-neutral-300 hover:bg-neutral-50'
-                      }`}
-                    >
-                      {index + 1}
-                    </Button>
-                  ))}
-                </div>
-                <Button
-                  variant="outline"
-                  disabled={page === totalPages}
-                  onClick={() => handlePageChange(page + 1)}
-                  className="px-4 py-2 rounded-full border-neutral-300 hover:bg-neutral-50 disabled:opacity-50"
-                >
-                  Next
-                </Button>
-              </motion.div>
+              <div className="flex justify-center items-center mt-12 space-x-2">
+                <Button variant="outline" size="sm" disabled={filters.page === 1} onClick={() => handlePageChange(filters.page - 1)}>Previous</Button>
+                {[...Array(totalPages)].map((_, i) => (
+                  <Button key={i} variant={filters.page === i + 1 ? 'default' : 'ghost'} size="sm" onClick={() => handlePageChange(i + 1)}>{i + 1}</Button>
+                ))}
+                <Button variant="outline" size="sm" disabled={filters.page === totalPages} onClick={() => handlePageChange(filters.page + 1)}>Next</Button>
+              </div>
             )}
-          </div>
+          </main>
         </div>
       </div>
+
+      {/* Mobile Filter Overlay */}
+      <AnimatePresence>
+        {isMobileFilterOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+            onClick={() => setIsMobileFilterOpen(false)}
+          >
+            <motion.div
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="absolute top-0 left-0 h-full w-full max-w-sm bg-white shadow-2xl flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-center p-4 border-b border-neutral-200">
+                <h3 className="font-heading text-xl">Filter & Sort</h3>
+                <Button variant="ghost" size="icon" onClick={() => setIsMobileFilterOpen(false)}><X size={20} /></Button>
+              </div>
+              <div className="p-6 space-y-8 overflow-y-auto">
+                <div>
+                  <h4 className="font-semibold text-sm tracking-wider uppercase text-neutral-800 mb-4">Categories</h4>
+                  <ul className="space-y-1">
+                    {categories.map((cat) => (
+                      <li key={cat.slug}>
+                        <button
+                          onClick={() => { handleCategoryChange(cat.slug); setIsMobileFilterOpen(false); }}
+                          className={`w-full text-left px-3 py-2.5 rounded-md text-base transition-colors ${
+                            filters.category === cat.slug
+                              ? 'bg-neutral-100 font-semibold text-neutral-900'
+                              : 'text-neutral-600 hover:bg-neutral-100/60 hover:text-neutral-900'
+                          }`}
+                        >
+                          {cat.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
-};
-
-export default ShopPage;
+}
