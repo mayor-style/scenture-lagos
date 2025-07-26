@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import CartService from '../services/cart.service';
 import { useAuth } from './AuthContext';
 import { useToast } from '../components/ui/Toast';
@@ -7,220 +8,123 @@ const CartContext = createContext();
 
 export const useCart = () => useContext(CartContext);
 
+// Define a query key to be used by React Query for caching and invalidation
+const cartQueryKey = ['cart'];
+
 export const CartProvider = ({ children }) => {
+  const queryClient = useQueryClient();
   const { addToast } = useToast();
   const { isAuthenticated } = useAuth();
-  const [cart, setCart] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  const initializeCart = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (isAuthenticated) {
-        const cartData = await CartService.getCart();
-        setCart(cartData || { items: [], totalItems: 0, subtotal: 0, discount: 0, total: 0, coupon: null });
-      } else {
-        const localCart = localStorage.getItem('cart');
-        if (localCart) {
-          setCart(JSON.parse(localCart));
-        } else {
-          const cartData = await CartService.getCart(); // Fetch guest cart from session
-          setCart(cartData || { items: [], totalItems: 0, subtotal: 0, discount: 0, total: 0, coupon: null });
-        }
-      }
-    } catch (err) {
-      console.error('Error initializing cart:', err);
-      setError(err.response?.data?.message || 'Failed to load cart. Please try again.');
-      addToast('Failed to load cart', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [isAuthenticated, addToast]);
+  // --- QUERIES ---
+  // useQuery handles fetching, caching, loading, and error states for us.
+  const { data: cart, isLoading, error, isSuccess } = useQuery({
+    queryKey: cartQueryKey,
+    queryFn: CartService.getCart,
+    staleTime: 1000 * 60 * 5, // Cache cart for 5 minutes
+    refetchOnWindowFocus: true, // Refetch when user returns to the tab
+  });
 
-  const saveCartToLocalStorage = useCallback(() => {
-    if (!isAuthenticated && cart) {
-      localStorage.setItem('cart', JSON.stringify(cart));
-    }
-  }, [cart, isAuthenticated]);
+  // --- MUTATIONS ---
+  // useMutation handles the logic for modifying data (POST, PUT, DELETE).
+  const { mutate: addToCart } = useMutation({
+    mutationFn: (item) => CartService.addToCart(item),
+    onSuccess: (updatedCart, variables) => {
+      // Instantly update the local cache with the server's response
+      queryClient.setQueryData(cartQueryKey, updatedCart);
+      addToast(`${variables.productName} added to cart`, 'success');
+    },
+    onError: (err) => {
+      addToast(err.message || 'Failed to add item', 'error');
+    },
+  });
 
-  useEffect(() => {
-    initializeCart();
-  }, [initializeCart]);
+  const { mutate: updateCartItem } = useMutation({
+    mutationFn: ({ itemId, quantity }) => CartService.updateCartItem(itemId, { quantity }),
+    onSuccess: (updatedCart) => {
+      queryClient.setQueryData(cartQueryKey, updatedCart);
+      addToast('Cart updated', 'success');
+    },
+    onError: (err) => {
+      addToast(err.message || 'Failed to update item', 'error');
+    },
+  });
 
-  useEffect(() => {
-    saveCartToLocalStorage();
-  }, [saveCartToLocalStorage]);
-
-  const addToCart = async (product, quantity = 1, variantId = null) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedCart = await CartService.addToCart({
-        productId: product.id,
-        quantity,
-        variantId,
-      });
-      setCart(updatedCart);
-      if (!isAuthenticated) {
-        localStorage.setItem('cart', JSON.stringify(updatedCart));
-      }
-      await initializeCart(); // Ensure latest state
-      console.log('added', product)
-      addToast(`${product.name} added to cart`, 'success');
-    } catch (err) {
-      console.error('Error adding to cart:', err);
-      setError(err.response?.data?.message || 'Failed to add item to cart. Please try again.');
-      addToast(err.response?.data?.message || 'Failed to add item to cart', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateCartItem = async (itemId, quantity) => {
-    if (quantity < 1) {
-      return removeFromCart(itemId);
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedCart = await CartService.updateCartItem(itemId, { quantity });
-      setCart(updatedCart);
-      if (!isAuthenticated) {
-        localStorage.setItem('cart', JSON.stringify(updatedCart));
-      }
-      await initializeCart();
-      addToast('Cart updated successfully', 'success');
-    } catch (err) {
-      console.error('Error updating cart item:', err);
-      setError(err.response?.data?.message || 'Failed to update cart. Please try again.');
-      addToast(err.response?.data?.message || 'Failed to update cart', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const removeFromCart = async (itemId) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedCart = await CartService.removeFromCart(itemId);
-      setCart(updatedCart);
-      if (!isAuthenticated) {
-        localStorage.setItem('cart', JSON.stringify(updatedCart));
-      }
-      await initializeCart();
+  const { mutate: removeFromCart } = useMutation({
+    mutationFn: (itemId) => CartService.removeFromCart(itemId),
+    onSuccess: (updatedCart) => {
+      queryClient.setQueryData(cartQueryKey, updatedCart);
       addToast('Item removed from cart', 'success');
-    } catch (err) {
-      console.error('Error removing from cart:', err);
-      setError(err.response?.data?.message || 'Failed to remove item from cart. Please try again.');
-      addToast(err.response?.data?.message || 'Failed to remove item from cart', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    onError: (err) => {
+      addToast(err.message || 'Failed to remove item', 'error');
+    },
+  });
 
-  const clearCart = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const updatedCart = await CartService.clearCart();
-      setCart(updatedCart);
-      if (!isAuthenticated) {
-        localStorage.setItem('cart', JSON.stringify(updatedCart));
-      }
-      await initializeCart();
+  const { mutate: clearCart } = useMutation({
+    mutationFn: CartService.clearCart,
+    onSuccess: (updatedCart) => {
+      queryClient.setQueryData(cartQueryKey, updatedCart);
       addToast('Cart cleared', 'success');
-    } catch (err) {
-      console.error('Error clearing cart:', err);
-      setError(err.response?.data?.message || 'Failed to clear cart. Please try again.');
-      addToast(err.response?.data?.message || 'Failed to clear cart', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    onError: (err) => {
+      addToast(err.message || 'Failed to clear cart', 'error');
+    },
+  });
 
-  const applyCoupon = async (code) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!isAuthenticated) {
-        setError('Please log in to apply coupons');
-        addToast('Please log in to apply coupons', 'error');
-        return;
-      }
-      const updatedCart = await CartService.applyCoupon({ code });
-      setCart(updatedCart);
-      await initializeCart();
-      addToast('Coupon applied successfully', 'success');
-    } catch (err) {
-      console.error('Error applying coupon:', err);
-      setError(err.response?.data?.message || 'Failed to apply coupon. Please check the code and try again.');
-      addToast(err.response?.data?.message || 'Invalid coupon code', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { mutate: applyCoupon } = useMutation({
+    mutationFn: (code) => CartService.applyCoupon({ code }),
+    onSuccess: (updatedCart) => {
+      queryClient.setQueryData(cartQueryKey, updatedCart);
+      addToast('Coupon applied', 'success');
+    },
+    onError: (err) => {
+      addToast(err.message || 'Invalid coupon code', 'error');
+    },
+  });
 
-  const removeCoupon = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!isAuthenticated) {
-        setError('Please log in to remove coupons');
-        addToast('Please log in to remove coupons', 'error');
-        return;
-      }
-      const updatedCart = await CartService.removeCoupon();
-      setCart(updatedCart);
-      await initializeCart();
+  const { mutate: removeCoupon } = useMutation({
+    mutationFn: CartService.removeCoupon,
+    onSuccess: (updatedCart) => {
+      queryClient.setQueryData(cartQueryKey, updatedCart);
       addToast('Coupon removed', 'success');
-    } catch (err) {
-      console.error('Error removing coupon:', err);
-      setError(err.response?.data?.message || 'Failed to remove coupon. Please try again.');
-      addToast(err.response?.data?.message || 'Failed to remove coupon', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    onError: (err) => {
+      addToast(err.message || 'Failed to remove coupon', 'error');
+    },
+  });
+  
+  // When authentication status changes, invalidate the cart query
+  // This will trigger a refetch to get the correct cart (guest or user)
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: cartQueryKey });
+  }, [isAuthenticated, queryClient]);
 
-  const mergeWithUserCart = async () => {
-    if (!isAuthenticated || !cart || cart.items.length === 0) return;
-    setLoading(true);
-    setError(null);
-    try {
-      for (const item of cart.items) {
-        await CartService.addToCart({
-          productId: item.product,
-          quantity: item.quantity,
-          variantId: item.variant?._id || null,
-        });
-      }
-      await initializeCart();
-      localStorage.removeItem('cart');
-      addToast('Cart updated with your items', 'success');
-    } catch (err) {
-      console.error('Error merging carts:', err);
-      setError(err.response?.data?.message || 'Failed to update your cart. Please try again.');
-      addToast(err.response?.data?.message || 'Failed to update cart', 'error');
-    } finally {
-      setLoading(false);
+  // When cart is fetched, check for backend validation messages
+  useEffect(() => {
+    if (isSuccess && cart) {
+      cart.items.forEach(item => {
+        if (item.hasPriceChanged) {
+          addToast(`Price of ${item.productName} updated`, 'info');
+        }
+        if (item.quantity > item.availableStock) {
+          addToast(`${item.productName} quantity adjusted due to stock`, 'warning');
+        }
+      });
     }
-  };
+  }, [cart, isSuccess, addToast]);
+
 
   const value = {
-    cart,
-    loading,
-    error,
+    cart: cart || { items: [] }, // Provide a default empty cart structure
+    isLoading,
+    error: error?.message,
     addToCart,
     updateCartItem,
     removeFromCart,
     clearCart,
     applyCoupon,
     removeCoupon,
-    mergeWithUserCart,
-    initializeCart,
   };
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

@@ -1,8 +1,7 @@
 // src/components/product/ProductCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingBag } from 'lucide-react';
-
+import { ShoppingBag, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardFooter } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { formatPrice } from '../../lib/utils';
@@ -10,7 +9,12 @@ import { useCart } from '../../contexts/CartContext';
 
 // Memoize the component to prevent unnecessary re-renders.
 const ProductCard = React.memo(({ product }) => {
-  const { addToCart } = useCart();
+  // We get the mutation function and its loading state from the context
+  const { addToCart, isLoading: isAddingToCart } = useCart();
+
+  if (!product) {
+    return null; // Or a placeholder, to prevent errors if product is undefined
+  }
 
   // Robustly select the main image URL.
   const mainImage = product.images?.find(img => img.isMain) || product.images?.[0];
@@ -18,26 +22,22 @@ const ProductCard = React.memo(({ product }) => {
 
   const handleAddToCart = (e) => {
     e.preventDefault();
+    e.stopPropagation();
+
+    // The addToCart mutation from CartContext expects a single object.
+    // We only need to send the ID and quantity. The backend will handle the rest.
+    // We also send productName to be used in the success toast message.
     addToCart({
-        id: product._id,
-        name: product.name,
-        price: product.price,
-        image: productImgUrl,
-        category: product.category?.name || 'Uncategorized',
-        slug: product.slug,
-        sku: product.sku || `SKU-${product._id}`,
-      },
-      1
-    );
+      productId: product._id,
+      quantity: 1,
+      variantId: null, // This card adds the base product without a variant
+      productName: product.name,
+    });
   };
 
-  if (!product) {
-    return null; // Or a placeholder, to prevent errors if product is undefined
-  }
-
   return (
-    <Card 
-      className="group relative flex flex-col h-full overflow-hidden rounded-lg border border-neutral-200 bg-white transition-all duration-300 ease-in-out hover:shadow-xl hover:border-transparent hover:-translate-y-1"
+    <Card
+      className="group relative flex flex-col h-full overflow-hidden rounded-2xl border border-neutral-200/80 bg-white transition-all duration-300 ease-in-out hover:shadow-xl hover:border-transparent hover:-translate-y-1"
       role="article"
       aria-label={`Product: ${product.name}`}
     >
@@ -76,8 +76,9 @@ const ProductCard = React.memo(({ product }) => {
             className="rounded-full w-10 h-10 shrink-0 border-neutral-300 text-neutral-600 hover:bg-neutral-900 hover:text-white hover:border-neutral-900 focus-visible:ring-offset-0"
             onClick={handleAddToCart}
             aria-label={`Add ${product.name} to cart`}
+            disabled={isAddingToCart} // Disable button while adding
           >
-            <ShoppingBag size={18} />
+            {isAddingToCart ? <Loader2 size={18} className="animate-spin" /> : <ShoppingBag size={18} />}
           </Button>
         </div>
       </CardFooter>

@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Helmet } from 'react-helmet-async';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Save, Edit, Trash2, Plus, X, Upload, Image as ImageIcon, Eye } from 'lucide-react';
+import { ArrowLeft, Save, Edit, Trash2, Plus, X, Upload, Image as ImageIcon, Eye, RefreshCw } from 'lucide-react';
 import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -10,16 +10,12 @@ import { Textarea } from '../../components/ui/Textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/Select';
 import ProductService from '../../services/admin/product.service';
 import { useToast } from '../../components/ui/Toast';
-import { useRefresh } from '../../contexts/RefreshContext';
 import { formatPrice } from '../../lib/utils';
-import DashboardService from '../../services/admin/dashboard.service';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 const containerVariants = {
   hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
+  visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
 const cardVariants = {
@@ -35,7 +31,7 @@ const ProductFormPage = () => {
   const isViewMode = !!id && !isEditMode;
   const isCreateMode = !id;
   const { addToast } = useToast();
-  const { setNeedsRefresh } = useRefresh();
+  const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
     name: '',
@@ -51,106 +47,221 @@ const ProductFormPage = () => {
     variants: [],
     images: [],
   });
-  const [categories, setCategories] = useState([]);
   const [newScentNote, setNewScentNote] = useState('');
-  const [newVariant, setNewVariant] = useState({ size: '', price: '', stock: '', sku: '' });
+  const [newVariant, setNewVariant] = useState({ size: '', price: '', stockQuantity: '', scentIntensity: 'medium', sku: '' });
   const [imageFiles, setImageFiles] = useState([]);
   const [errors, setErrors] = useState({});
-  const [loading, setLoading] = useState(!!id);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isGeneratingSKU, setIsGeneratingSKU] = useState(false);
   const [isGeneratingVariantSKU, setIsGeneratingVariantSKU] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // --- React Query for Product Data ---
+  const {
+    data: productData,
+    isLoading: productLoading,
+    isError: productError,
+    error: productErrorMessage,
+  } = useQuery({
+    queryKey: ['product', id],
+    queryFn: () => ProductService.getProduct(id),
+    enabled: !!id,
+    onSuccess: (data) => {
+      // Debugging: Log the received data
+      console.log('Product Query onSuccess:', data);
+      setFormData({
+        name: data.name || '',
+        sku: data.sku || '',
+        price: data.price || '',
+        stock: data.stock || '',
+        status: data.status || 'published',
+        category: data.category?.name || '',
+        categoryId: data.category?._id || 'all',
+        description: data.description || '',
+        scent_notes: [
+          ...(data.scentNotes?.top || []),
+          ...(data.scentNotes?.middle || []),
+          ...(data.scentNotes?.base || []),
+        ],
+        ingredients: Array.isArray(data.ingredients) ? data.ingredients.join(', ') : data.ingredients || '',
+        variants: data.variants || [],
+        images: data.images || [],
+      });
+    },
+    onError: (err) => {
+      console.error('Product Query Error:', err);
+      addToast(`Failed to load product: ${err.message}`, 'error');
+    },
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+
+  // Debugging: Log formData changes
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const cachedCategories = ProductService.getCachedData(`categories_${JSON.stringify({})}`);
-        if (cachedCategories) {
-          setCategories(cachedCategories.data);
-        } else {
-          const categoriesResponse = await ProductService.getAllCategories();
-          setCategories(categoriesResponse.data);
-        }
+    console.log('formData Updated:', formData);
+  }, [formData]);
 
-        if (id) {
-          try {
-            const cachedProduct = ProductService.getCachedData(`product_${id}`);
-            if (cachedProduct) {
-              setFormData({
-                name: cachedProduct.product.name || '',
-                sku: cachedProduct.product.sku || '',
-                price: cachedProduct.product.price || '',
-                stock: cachedProduct.product.stock || '',
-                status: cachedProduct.product.status || 'published',
-                category: cachedProduct.product.category || '',
-                categoryId: cachedProduct.product.categoryId || 'all',
-                description: cachedProduct.product.description || '',
-                scent_notes: cachedProduct.product.scent_notes || [],
-                ingredients: cachedProduct.product.ingredients || '',
-                variants: cachedProduct.product.variants || [],
-                images: cachedProduct.product.images || [],
-              });
-            } else {
-              const { product } = await ProductService.getProduct(id);
-              setFormData({
-                name: product.name || '',
-                sku: product.sku || '',
-                price: product.price || '',
-                stock: product.stock || '',
-                status: product.status || 'published',
-                category: product.category || '',
-                categoryId: product.categoryId || 'all',
-                description: product.description || '',
-                scent_notes: product.scent_notes || [],
-                ingredients: product.ingredients || '',
-                variants: product.variants || [],
-                images: product.images || [],
-              });
-            }
-          } catch (err) {
-            addToast(`Failed to load product: ${err.message}`, 'error');
-          }
-        }
-      } catch (err) {
-        addToast(`Failed to load data: ${err.message}`, 'error');
-      } finally {
-        setLoading(false);
+  // --- React Query for Categories ---
+  const {
+    data: categoriesData,
+    isLoading: categoriesLoading,
+    isError: categoriesError,
+    error: categoriesErrorMessage,
+  } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => ProductService.getAllCategories(),
+    onError: (err) => {
+      console.error('Categories Query Error:', err);
+      addToast(`Failed to load categories: ${err.message}`, 'error');
+    },
+    staleTime: 15 * 60 * 1000,
+  });
+
+  const categories = categoriesData?.data || [];
+  const loading = isCreateMode ? false : productLoading || categoriesLoading;
+
+  // Debugging: Log loading state
+  useEffect(() => {
+    console.log('Loading State:', { loading, productLoading, categoriesLoading });
+  }, [loading, productLoading, categoriesLoading]);
+
+  // --- Mutations ---
+  const createProductMutation = useMutation({
+    mutationFn: ProductService.createProduct,
+    onSuccess: async (response) => {
+      addToast('Product created successfully', 'success');
+      if (imageFiles.length > 0) {
+        const formData = new FormData();
+        imageFiles.forEach((file) => formData.append('images', file));
+        await uploadProductImagesMutation.mutateAsync({ productId: response.data.data.product._id, formData });
       }
-    };
-    fetchData();
-  }, [id, addToast]);
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['product', response.data.data.product._id]);
+      navigate('/admin/products');
+    },
+    onError: (err) => {
+      addToast(`Failed to create product: ${err.message}`, 'error');
+    },
+  });
 
-  const handleChange = (e) => {
+  const updateProductMutation = useMutation({
+    mutationFn: ({ id, payload }) => ProductService.updateProduct(id, payload),
+    onSuccess: async () => {
+      addToast('Product updated successfully', 'success');
+      if (imageFiles.length > 0) {
+        const formData = new FormData();
+        imageFiles.forEach((file) => formData.append('images', file));
+        await uploadProductImagesMutation.mutateAsync({ productId: id, formData });
+      }
+      queryClient.invalidateQueries(['products']);
+      queryClient.invalidateQueries(['product', id]);
+      navigate('/admin/products');
+    },
+    onError: (err) => {
+      addToast(`Failed to update product: ${err.message}`, 'error');
+    },
+  });
+
+  const deleteProductMutation = useMutation({
+    mutationFn: ProductService.deleteProduct,
+    onSuccess: () => {
+      addToast('Product deleted successfully', 'success');
+      queryClient.invalidateQueries(['products']);
+      navigate('/admin/products');
+    },
+    onError: (err) => {
+      addToast(`Failed to delete product: ${err.message}`, 'error');
+    },
+  });
+
+  const uploadProductImagesMutation = useMutation({
+    mutationFn: ({ productId, formData }) =>
+      ProductService.uploadProductImages(productId, formData, (progressEvent) => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setUploadProgress(percentCompleted);
+      }),
+    onMutate: () => {
+      setIsUploading(true);
+      setUploadProgress(0);
+    },
+    onSuccess: (response) => {
+      setFormData((prev) => ({
+        ...prev,
+        images: response.data.product.images,
+      }));
+      addToast('Images uploaded successfully', 'success');
+      queryClient.invalidateQueries(['product', id]);
+    },
+    onError: (err) => {
+      addToast(`Failed to upload images: ${err.message}`, 'error');
+    },
+    onSettled: () => {
+      setIsUploading(false);
+      setUploadProgress(0);
+      setImageFiles([]);
+    },
+  });
+
+  const deleteProductImageMutation = useMutation({
+    mutationFn: ({ productId, imageId }) => ProductService.deleteProductImage(productId, imageId),
+    onSuccess: (response) => {
+      setFormData((prev) => ({
+        ...prev,
+        images: response.data.product.images,
+      }));
+      addToast('Image removed successfully', 'success');
+      queryClient.invalidateQueries(['product', id]);
+    },
+    onError: (err) => {
+      addToast(`Failed to remove image: ${err.message}`, 'error');
+    },
+  });
+
+  const setMainProductImageMutation = useMutation({
+    mutationFn: ({ productId, imageId }) => ProductService.setMainProductImage(productId, imageId),
+    onSuccess: (response) => {
+      setFormData((prev) => ({
+        ...prev,
+        images: response.data.product.images,
+      }));
+      addToast('Main image updated successfully', 'success');
+      queryClient.invalidateQueries(['product', id]);
+    },
+    onError: (err) => {
+      addToast(`Failed to set main image: ${err.message}`, 'error');
+    },
+  });
+
+  // --- Handlers ---
+  const handleChange = useCallback((e) => {
     if (isViewMode) return;
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: '' }));
-  };
+  }, [isViewMode]);
 
-  const handleAddScentNote = () => {
+  const handleAddScentNote = useCallback(() => {
     if (isViewMode || !newScentNote.trim()) return;
     setFormData((prev) => ({
       ...prev,
       scent_notes: [...prev.scent_notes, newScentNote.trim()],
     }));
     setNewScentNote('');
-  };
+  }, [isViewMode, newScentNote]);
 
-  const handleRemoveScentNote = (index) => {
+  const handleRemoveScentNote = useCallback((index) => {
     if (isViewMode) return;
     setFormData((prev) => ({
       ...prev,
       scent_notes: prev.scent_notes.filter((_, i) => i !== index),
     }));
-  };
+  }, [isViewMode]);
 
-  const handleVariantChange = (e) => {
+  const handleVariantChange = useCallback((e) => {
     if (isViewMode) return;
     const { name, value } = e.target;
     setNewVariant((prev) => ({ ...prev, [name]: value }));
-  };
+  }, [isViewMode]);
 
   const handleAddVariant = async () => {
     if (isViewMode) return;
@@ -158,35 +269,43 @@ const ProductFormPage = () => {
       addToast('Please generate a product SKU first', 'error');
       return;
     }
-    if (newVariant.size && newVariant.price && newVariant.stock) {
-      setIsGeneratingVariantSKU(true);
-      try {
-        const variantSKU = await ProductService.generateVariantSKU(formData.sku, newVariant.size);
-        setFormData((prev) => ({
-          ...prev,
-          variants: [...prev.variants, { ...newVariant, id: Date.now(), sku: variantSKU }],
-        }));
-        setNewVariant({ size: '', price: '', stock: '', sku: '' });
-      } catch (err) {
-        addToast(`Failed to add variant: ${err.message}`, 'error');
-      } finally {
-        setIsGeneratingVariantSKU(false);
-      }
-    } else {
-      addToast('Please fill all variant fields', 'error');
+    if (!newVariant.size || !newVariant.price || !newVariant.stockQuantity || !newVariant.scentIntensity) {
+      addToast('Please fill all required variant fields', 'error');
+      return;
+    }
+    setIsGeneratingVariantSKU(true);
+    try {
+      const variantSKU = await ProductService.generateVariantSKU(formData.sku, newVariant.size);
+      setFormData((prev) => ({
+        ...prev,
+        variants: [
+          ...prev.variants,
+          {
+            ...newVariant,
+            _id: Date.now().toString(),
+            sku: variantSKU,
+            priceAdjustment: parseFloat(newVariant.price || 0) - parseFloat(formData.price || 0),
+          },
+        ],
+      }));
+      setNewVariant({ size: '', price: '', stockQuantity: '', scentIntensity: 'medium', sku: '' });
+    } catch (err) {
+      addToast(`Failed to add variant: ${err.message}`, 'error');
+    } finally {
+      setIsGeneratingVariantSKU(false);
     }
   };
 
-  const handleRemoveVariant = (id) => {
+  const handleRemoveVariant = useCallback((id) => {
     if (isViewMode) return;
     setFormData((prev) => ({
       ...prev,
       variants: prev.variants.filter((variant) => variant._id !== id && variant.id !== id),
     }));
-  };
+  }, [isViewMode]);
 
   const compressImage = async (file) => {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = (event) => {
@@ -218,6 +337,10 @@ const ProductFormPage = () => {
 
           canvas.toBlob(
             (blob) => {
+              if (!blob) {
+                reject(new Error('Image compression failed: Blob is null.'));
+                return;
+              }
               const compressedFile = new File([blob], file.name, {
                 type: 'image/jpeg',
                 lastModified: Date.now(),
@@ -228,7 +351,9 @@ const ProductFormPage = () => {
             0.8
           );
         };
+        img.onerror = () => reject(new Error('Failed to load image for compression.'));
       };
+      reader.onerror = () => reject(new Error('Failed to read file for compression.'));
     });
   };
 
@@ -248,23 +373,12 @@ const ProductFormPage = () => {
       if (isEditMode || id) {
         const formData = new FormData();
         compressedFiles.forEach((file) => formData.append('images', file));
-        const response = await ProductService.uploadProductImages(id, formData, (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        });
-        setFormData((prev) => ({
-          ...prev,
-          images: response.product.images,
-        }));
-        addToast('Images uploaded successfully', 'success');
-        ProductService.clearCache();
-        DashboardService.clearCache();
-        setNeedsRefresh(true);
+        await uploadProductImagesMutation.mutateAsync({ productId: id, formData });
       } else {
         const newImageUrls = compressedFiles.map((file) => ({
           url: URL.createObjectURL(file),
           _id: null,
-          isMain: formData.images.length === 0,
+          isMain: formData.images.length === 0 && !formData.images.some((img) => img.isMain),
           public_id: null,
         }));
         setFormData((prev) => ({
@@ -286,7 +400,7 @@ const ProductFormPage = () => {
     const imageId = newImages[index]?._id;
     newImages.splice(index, 1);
 
-    if (newImages.length > 0 && newImages[index]?.isMain) {
+    if (newImages.length > 0 && newImages[0]) {
       newImages[0].isMain = true;
     }
 
@@ -294,36 +408,16 @@ const ProductFormPage = () => {
     setImageFiles((prev) => prev.filter((_, i) => i !== index));
 
     if ((isEditMode || id) && imageId) {
-      try {
-        await ProductService.deleteProductImage(id, imageId);
-        addToast('Image removed successfully', 'success');
-        ProductService.clearCache();
-        DashboardService.clearCache();
-        setNeedsRefresh(true);
-      } catch (err) {
-        addToast(`Failed to remove image: ${err.message}`, 'error');
-      }
+      await deleteProductImageMutation.mutateAsync({ productId: id, imageId });
     }
   };
 
   const handleSetMainImage = async (imageId) => {
     if (isViewMode || !imageId) return;
-    try {
-      const response = await ProductService.setMainProductImage(id, imageId);
-      setFormData((prev) => ({
-        ...prev,
-        images: response.product.images,
-      }));
-      addToast('Main image updated successfully', 'success');
-      ProductService.clearCache();
-      DashboardService.clearCache();
-      setNeedsRefresh(true);
-    } catch (err) {
-      addToast(`Failed to set main image: ${err.message}`, 'error');
-    }
+    await setMainProductImageMutation.mutateAsync({ productId: id, imageId });
   };
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const newErrors = {};
     if (!formData.name) newErrors.name = 'Product name is required';
     if (!formData.sku) newErrors.sku = 'Please generate a SKU';
@@ -354,7 +448,7 @@ const ProductFormPage = () => {
         if (isNaN(parseFloat(variant.price)) || parseFloat(variant.price) < 0) {
           variantErrors.push(`Variant #${index + 1}: Price must be a valid positive number`);
         }
-        if (isNaN(parseInt(variant.stock)) || parseInt(variant.stock) < 0) {
+        if (isNaN(parseInt(variant.stockQuantity)) || parseInt(variant.stockQuantity) < 0) {
           variantErrors.push(`Variant #${index + 1}: Stock must be a valid positive number`);
         }
       });
@@ -369,72 +463,43 @@ const ProductFormPage = () => {
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  };
+  }, [formData]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isViewMode) return;
-    if (validateForm()) {
-      setIsSubmitting(true);
-      try {
-        const payload = {
-          name: formData.name,
-          sku: formData.sku,
-          price: parseFloat(formData.price),
-          stockQuantity: parseInt(formData.stock),
-          status: formData.status,
-          category: formData.categoryId === 'all' ? '' : formData.categoryId,
-          description: formData.description,
-          scentNotes: {
-            top: formData.scent_notes.slice(0, Math.ceil(formData.scent_notes.length / 3)),
-            middle: formData.scent_notes.slice(Math.ceil(formData.scent_notes.length / 3), Math.ceil(formData.scent_notes.length * 2 / 3)),
-            base: formData.scent_notes.slice(Math.ceil(formData.scent_notes.length * 2 / 3)),
-          },
-          ingredients: formData.ingredients.split(',').map((item) => item.trim()).filter(Boolean),
-          variants: formData.variants.map((variant) => ({
-            sku: variant.sku,
-            size: variant.size,
-            priceAdjustment: parseFloat(variant.price) - parseFloat(formData.price),
-            stockQuantity: parseInt(variant.stock),
-            scentIntensity: 'medium',
-          })),
-        };
+    if (!validateForm()) return;
 
-        let response;
-        if (isEditMode) {
-          response = await ProductService.updateProduct(id, payload);
-          if (imageFiles.length > 0) {
-            const formData = new FormData();
-            imageFiles.forEach((file) => formData.append('images', file));
-            const uploadResponse = await ProductService.uploadProductImages(id, formData);
-            setFormData((prev) => ({
-              ...prev,
-              images: uploadResponse.product.images,
-            }));
-          }
-          addToast('Product updated successfully', 'success');
-        } else {
-          response = await ProductService.createProduct(payload);
-          if (imageFiles.length > 0) {
-            const formData = new FormData();
-            imageFiles.forEach((file) => formData.append('images', file));
-            const uploadResponse = await ProductService.uploadProductImages(response.data.data.product._id, formData);
-            setFormData((prev) => ({
-              ...prev,
-              images: uploadResponse.product.images,
-            }));
-          }
-          addToast('Product created successfully', 'success');
-        }
-        ProductService.clearCache();
-        DashboardService.clearCache();
-        setNeedsRefresh(true);
-        navigate('/admin/products');
-      } catch (err) {
-        addToast(`Operation failed: ${err.message}`, 'error');
-      } finally {
-        setIsSubmitting(false);
-      }
+    const payload = {
+      name: formData.name,
+      sku: formData.sku,
+      price: parseFloat(formData.price),
+      stockQuantity: parseInt(formData.stock),
+      status: formData.status,
+      category: formData.categoryId === 'all' ? '' : formData.categoryId,
+      description: formData.description,
+      scentNotes: {
+        top: formData.scent_notes.slice(0, Math.ceil(formData.scent_notes.length / 3)),
+        middle: formData.scent_notes.slice(
+          Math.ceil(formData.scent_notes.length / 3),
+          Math.ceil(formData.scent_notes.length * 2 / 3)
+        ),
+        base: formData.scent_notes.slice(Math.ceil(formData.scent_notes.length * 2 / 3)),
+      },
+      ingredients: formData.ingredients.split(',').map((item) => item.trim()).filter(Boolean),
+      variants: formData.variants.map((variant) => ({
+        sku: variant.sku,
+        size: variant.size,
+        priceAdjustment: parseFloat(variant.price) - parseFloat(formData.price),
+        stockQuantity: parseInt(variant.stockQuantity),
+        scentIntensity: variant.scentIntensity,
+      })),
+    };
+
+    if (isEditMode) {
+      await updateProductMutation.mutateAsync({ id, payload });
+    } else {
+      await createProductMutation.mutateAsync(payload);
     }
   };
 
@@ -444,16 +509,26 @@ const ProductFormPage = () => {
       return;
     }
     if (window.confirm('Are you sure you want to delete this product?')) {
-      try {
-        await ProductService.deleteProduct(id);
-        addToast('Product deleted successfully', 'success');
-        ProductService.clearCache();
-        DashboardService.clearCache();
-        setNeedsRefresh(true);
-        navigate('/admin/products');
-      } catch (err) {
-        addToast(`Failed to delete product: ${err.message}`, 'error');
-      }
+      await deleteProductMutation.mutateAsync(id);
+    }
+  };
+
+  const handleGenerateSKU = async () => {
+    if (isViewMode || formData.categoryId === 'all') {
+      addToast('Select a category first', 'error');
+      return;
+    }
+    setIsGeneratingSKU(true);
+    try {
+      const response = await ProductService.generateSKU(formData.categoryId);
+      const sku = response.data.sku;
+      if (!sku) throw new Error('No SKU returned from server');
+      setFormData((prev) => ({ ...prev, sku }));
+      setErrors((prev) => ({ ...prev, sku: '' }));
+    } catch (err) {
+      addToast(err.message || 'Failed to generate SKU', 'error');
+    } finally {
+      setIsGeneratingSKU(false);
     }
   };
 
@@ -465,9 +540,9 @@ const ProductFormPage = () => {
         </title>
       </Helmet>
       <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.5 }}
         className="container mx-auto space-y-6 py-6 sm:py-8 px-4 sm:px-6 max-w-7xl"
       >
         {/* Header */}
@@ -526,6 +601,17 @@ const ProductFormPage = () => {
             </div>
           )}
         </motion.header>
+
+        {/* Error State */}
+        {(productError || categoriesError) && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-md"
+          >
+            <p>{productErrorMessage?.message || categoriesErrorMessage?.message || 'Failed to load data'}</p>
+          </motion.div>
+        )}
 
         {/* Loading State */}
         {loading && (
@@ -615,28 +701,11 @@ const ProductFormPage = () => {
                             {isCreateMode && (
                               <Button
                                 type="button"
-                                onClick={async () => {
-                                  if (formData.categoryId === 'all') {
-                                    addToast('Select a category first', 'error');
-                                    return;
-                                  }
-                                  setIsGenerating(true);
-                                  try {
-                                    const response = await ProductService.generateSKU(formData.categoryId);
-                                    const sku = response.data.sku;
-                                    if (!sku) throw new Error('No SKU returned from server');
-                                    setFormData((prev) => ({ ...prev, sku }));
-                                    setErrors((prev) => ({ ...prev, sku: '' }));
-                                  } catch (err) {
-                                    addToast(err.message || 'Failed to generate SKU', 'error');
-                                  } finally {
-                                    setIsGenerating(false);
-                                  }
-                                }}
+                                onClick={handleGenerateSKU}
                                 className="bg-primary hover:bg-primary-dark"
-                                disabled={isGenerating || formData.sku}
+                                disabled={isGeneratingSKU || formData.sku}
                               >
-                                {isGenerating ? (
+                                {isGeneratingSKU ? (
                                   <>
                                     <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                                     Generating...
@@ -881,6 +950,7 @@ const ProductFormPage = () => {
                             <th className="text-left font-medium p-3">SKU</th>
                             <th className="text-left font-medium p-3">Price (₦)</th>
                             <th className="text-left font-medium p-3">Stock</th>
+                            <th className="text-left font-medium p-3">Scent Intensity</th>
                             {!isViewMode && <th className="text-right font-medium p-3 pr-0">Actions</th>}
                           </tr>
                         </thead>
@@ -898,7 +968,8 @@ const ProductFormPage = () => {
                                   <td className="p-3 pl-0 text-secondary">{variant.size}</td>
                                   <td className="p-3 text-secondary">{variant.sku}</td>
                                   <td className="p-3 text-secondary">{formatPrice(variant.price)}</td>
-                                  <td className="p-3 text-secondary">{variant.stock}</td>
+                                  <td className="p-3 text-secondary">{variant.stockQuantity}</td>
+                                  <td className="p-3 text-secondary">{variant.scentIntensity}</td>
                                   {!isViewMode && (
                                     <td className="p-3 pr-0 text-right">
                                       <Button
@@ -916,7 +987,7 @@ const ProductFormPage = () => {
                               ))
                             ) : (
                               <tr>
-                                <td colSpan={isViewMode ? 4 : 5} className="p-3 text-center text-muted-foreground">
+                                <td colSpan={isViewMode ? 5 : 6} className="p-3 text-center text-muted-foreground">
                                   No variants added yet
                                 </td>
                               </tr>
@@ -926,7 +997,7 @@ const ProductFormPage = () => {
                       </table>
                     </div>
                     {!isViewMode && (
-                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 mt-4">
                         <Input
                           name="size"
                           value={newVariant.size}
@@ -942,29 +1013,41 @@ const ProductFormPage = () => {
                           min="0"
                           step="100"
                         />
-                        <div className="flex">
-                          <Input
-                            type="number"
-                            name="stock"
-                            value={newVariant.stock}
-                            onChange={handleVariantChange}
-                            placeholder="Stock"
-                            min="0"
-                            className="rounded-r-none"
-                          />
-                          <Button
-                            type="button"
-                            onClick={handleAddVariant}
-                            className="rounded-l-none bg-primary hover:bg-primary-dark"
-                            disabled={isGeneratingVariantSKU}
-                          >
-                            {isGeneratingVariantSKU ? (
-                              <RefreshCw className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Plus className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
+                        <Input
+                          type="number"
+                          name="stockQuantity"
+                          value={newVariant.stockQuantity}
+                          onChange={handleVariantChange}
+                          placeholder="Stock"
+                          min="0"
+                        />
+                        <Select
+                          value={newVariant.scentIntensity}
+                          onValueChange={(value) =>
+                            setNewVariant((prev) => ({ ...prev, scentIntensity: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Scent Intensity" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="light">Light</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="strong">Strong</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          onClick={handleAddVariant}
+                          className="bg-primary hover:bg-primary-dark"
+                          disabled={isGeneratingVariantSKU}
+                        >
+                          {isGeneratingVariantSKU ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Plus className="h-4 w-4" />
+                          )}
+                        </Button>
                       </div>
                     )}
                   </CardContent>
@@ -1111,9 +1194,9 @@ const ProductFormPage = () => {
                         type="submit"
                         onClick={handleSubmit}
                         className="w-full bg-primary hover:bg-primary-dark"
-                        disabled={isSubmitting}
+                        disabled={createProductMutation.isLoading || updateProductMutation.isLoading}
                       >
-                        {isSubmitting ? (
+                        {(createProductMutation.isLoading || updateProductMutation.isLoading) ? (
                           <>
                             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                             {isEditMode ? 'Updating...' : 'Creating...'}

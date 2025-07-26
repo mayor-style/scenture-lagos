@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react'; // Added useRef, useCallback
 import { Helmet } from 'react-helmet-async';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,11 +19,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../..
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/Select';
-import { LoadingState, LoadingOverlay } from '../../components/ui/LoadingState';
+import { LoadingOverlay } from '../../components/ui/LoadingState'; // Removed LoadingState, as it's not directly used here
 import ErrorState from '../../components/ui/ErrorState';
 import { useToast } from '../../components/ui/Toast';
 import { formatPrice, formatDate } from '../../lib/utils';
-import OrderService from '../../services/admin/order.service';
+// CORRECTED IMPORT PATH for OrderService
+import OrderService from '../../services/admin/order.service'; // Adjusted path to '../../services/OrderService'
 
 const ORDER_STATUS_OPTIONS = [
   { value: 'all', label: 'All Status' },
@@ -63,20 +64,22 @@ const OrdersPage = () => {
   const location = useLocation();
   const queryParams = new URLSearchParams(location.search);
   const { addToast } = useToast();
+
   const [orders, setOrders] = useState([]);
-  const [totalOrders, setTotalOrders] = useState(0);
+  const [totalOrders, setTotalOrders] = useState(0); // This will now come directly from API service
+  const [totalPages, setTotalPages] = useState(0); // Add state for totalPages
   const [isPolling, setIsPolling] = useState(false);
-  const [pollingInterval, setPollingInterval] = useState(null);
+  const pollingIntervalRef = useRef(null); // Use useRef for polling interval ID
+
   const [searchTerm, setSearchTerm] = useState(queryParams.get('search') || '');
   const [selectedStatus, setSelectedStatus] = useState(queryParams.get('status') || 'all');
   const [selectedPaymentStatus, setSelectedPaymentStatus] = useState(queryParams.get('payment_status') || 'all');
   const [currentPage, setCurrentPage] = useState(parseInt(queryParams.get('page') || '1', 10));
-  const [itemsPerPage, setItemsPerPage] = useState(parseInt(queryParams.get('limit') || '10', 10));
+  const [itemsPerPage, setItemsPerPage] = useState(parseInt(queryParams.get('limit') || '10', 10)); // Can add a select input for this later
+
   const [openOrder, setOpenOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
-  const totalPages = Math.ceil(totalOrders / itemsPerPage);
 
   const statusStyles = {
     delivered: 'bg-green-100 text-green-800',
@@ -85,10 +88,12 @@ const OrdersPage = () => {
     shipped: 'bg-purple-100 text-purple-800',
     cancelled: 'bg-destructive/20 text-destructive',
     refunded: 'bg-blue-200 text-blue-900',
+    paid: 'bg-green-100 text-green-800', // Added for payment status consistency
     failed: 'bg-destructive/20 text-destructive',
   };
 
-  const fetchOrders = async () => {
+  // useCallback to memoize fetchOrders and prevent unnecessary re-renders/effect triggers
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -102,6 +107,7 @@ const OrdersPage = () => {
       };
 
       const searchParams = new URLSearchParams();
+      // Only add to URL if they are not default values
       if (currentPage > 1) searchParams.set('page', currentPage.toString());
       if (searchTerm) searchParams.set('search', searchTerm);
       if (selectedStatus !== 'all') searchParams.set('status', selectedStatus);
@@ -109,39 +115,57 @@ const OrdersPage = () => {
       if (itemsPerPage !== 10) searchParams.set('limit', itemsPerPage.toString());
 
       const newUrl = `${location.pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+      // Use navigate with replace to avoid adding multiple history entries for filter/search changes
       if (newUrl !== location.pathname + location.search) {
         navigate(newUrl, { replace: true });
       }
 
       const data = await OrderService.getOrders(params);
-      if (!data.orders) {
-        addToast('No orders found matching your criteria', 'error');
-        setOrders([]);
-        setTotalOrders(0);
-        return;
-      }
 
+      // No need for !data.orders check, as OrderService now returns an empty array if no orders
       setOrders(
         data.orders.map((order) => ({
           ...order,
-          id: order._id,
+          id: order._id, // Ensure consistent ID
           customer: order.user ? `${order.user.firstName} ${order.user.lastName}` : 'Guest',
-          email: order.user?.email || 'N/A',
+          // Use shippingAddress.email for consistency across the board
+          email: order.shippingAddress?.email || 'N/A',
           date: order.createdAt,
           total: order.totalAmount,
-          payment_status: order.paymentInfo.status,
+          payment_status: order.paymentInfo?.status, // Safely access paymentInfo.status
         }))
       );
       setTotalOrders(data.total);
+      setTotalPages(data.pages); // Set total pages from API response
+
+      if (data.orders.length === 0 && (searchTerm || selectedStatus !== 'all' || selectedPaymentStatus !== 'all')) {
+        addToast('No orders found matching your criteria', 'info'); // Changed to 'info' as it's not an error from API but no results
+      }
     } catch (err) {
       setError(err.message || 'Failed to load orders');
       setOrders([]);
       setTotalOrders(0);
+      setTotalPages(0);
       addToast(err.message || 'Failed to load orders', 'error');
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, itemsPerPage, searchTerm, selectedStatus, selectedPaymentStatus, location.pathname, location.search, navigate, addToast]); // Added fetchOrders dependencies
+
+  // Effect to fetch orders whenever relevant parameters change
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]); // Dependency array now depends on memoized fetchOrders
+
+  // Effect for polling mechanism
+  useEffect(() => {
+    // Cleanup function
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []); // Run only once on mount for cleanup setup
 
   const handleExportOrders = () => {
     if (!orders.length) {
@@ -149,9 +173,10 @@ const OrdersPage = () => {
       return;
     }
 
-    const csvHeaders = ['Order ID', 'Customer', 'Email', 'Date', 'Total', 'Status', 'Payment Status'];
+    const csvHeaders = ['Order ID', 'Order Number', 'Customer', 'Email', 'Date', 'Total', 'Status', 'Payment Status'];
     const csvRows = orders.map((order) => [
       order.id,
+      order.orderNumber, // Include orderNumber in export
       order.customer,
       order.email,
       formatDate(order.date),
@@ -170,11 +195,13 @@ const OrdersPage = () => {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+    addToast('Orders exported successfully', 'success'); // Added success toast
   };
 
   const handlePageChange = (pageNumber) => {
-    if (pageNumber !== currentPage) {
+    if (pageNumber >= 1 && pageNumber <= totalPages && pageNumber !== currentPage) {
       setCurrentPage(pageNumber);
+      setOpenOrder(null); // Close any open accordion when changing page
     }
   };
 
@@ -184,25 +211,35 @@ const OrdersPage = () => {
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
-    setCurrentPage(1);
-    fetchOrders();
+    setCurrentPage(1); // Reset to first page on new search
+    // fetchOrders will be triggered by useEffect due to searchTerm and currentPage change
   };
 
   const toggleOrder = (orderId) => {
     setOpenOrder(openOrder === orderId ? null : orderId);
   };
 
-  useEffect(() => {
-    fetchOrders();
-  }, [currentPage, itemsPerPage, selectedStatus, selectedPaymentStatus]);
-
-  useEffect(() => {
-    return () => {
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
+  const togglePolling = () => {
+    if (isPolling) {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
       }
-    };
-  }, [pollingInterval]);
+      pollingIntervalRef.current = null;
+      setIsPolling(false);
+      addToast('Real-time updates disabled', 'success');
+    } else {
+      // Clear any existing interval before setting a new one
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+      const interval = setInterval(() => {
+        fetchOrders(); // Call the memoized fetchOrders
+      }, 60000); // Poll every 60 seconds (1 minute)
+      pollingIntervalRef.current = interval;
+      setIsPolling(true);
+      addToast('Real-time updates enabled', 'success');
+    }
+  };
 
   return (
     <>
@@ -239,33 +276,21 @@ const OrdersPage = () => {
               <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportOrders}
-              disabled={loading || !orders.length}
-              className="hover:bg-primary/10"
-              aria-label="Export orders"
-            >
+           <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExportOrders}
+            disabled={loading || orders.length === 0} // Changed from !orders.length for clarity
+            className="hover:bg-primary/10"
+            aria-label="Export orders"
+          >
               <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                if (isPolling) {
-                  clearInterval(pollingInterval);
-                  setPollingInterval(null);
-                  setIsPolling(false);
-                  addToast('Real-time updates disabled', 'success');
-                } else {
-                  const interval = setInterval(() => fetchOrders(), 60000);
-                  setPollingInterval(interval);
-                  setIsPolling(true);
-                  addToast('Real-time updates enabled', 'success');
-                }
-              }}
+              onClick={togglePolling} // Call the refactored togglePolling
               disabled={loading}
               className="hover:bg-primary/10"
               aria-label={isPolling ? 'Stop real-time updates' : 'Start real-time updates'}
@@ -370,7 +395,8 @@ const OrdersPage = () => {
                                   <td className="p-4 pl-0 font-medium text-secondary">{order.orderNumber}</td>
                                   <td className="p-4">
                                     <div className="font-medium text-secondary">{order.customer}</div>
-                                    <div className="text-xs text-muted-foreground">{order.shippingAddress.email}</div>
+                                    {/* Consistent email source */}
+                                    <div className="text-xs text-muted-foreground">{order.email}</div>
                                   </td>
                                   <td className="p-4">
                                     <div className="flex items-center">
@@ -381,14 +407,14 @@ const OrdersPage = () => {
                                   <td className="p-4 text-secondary">{formatPrice(order.total)}</td>
                                   <td className="p-4">
                                     <span
-                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.status]}`}
+                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.status] || 'bg-gray-100 text-gray-800'}`} 
                                     >
                                       {order.status}
                                     </span>
                                   </td>
                                   <td className="p-4">
                                     <span
-                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.payment_status]}`}
+                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.payment_status] || 'bg-gray-100 text-gray-800'}`} 
                                     >
                                       {order.payment_status}
                                     </span>
@@ -463,7 +489,7 @@ const OrdersPage = () => {
                                 >
                                   <div>
                                     <div className="text-xs text-muted-foreground font-medium">Email</div>
-                                    <div className="text-sm text-secondary">{order.shippingAddress.email}</div>
+                                    <div className="text-sm text-secondary">{order.email}</div>
                                   </div>
                                   <div>
                                     <div className="text-xs text-muted-foreground font-medium">Date</div>
@@ -479,7 +505,7 @@ const OrdersPage = () => {
                                   <div>
                                     <div className="text-xs text-muted-foreground font-medium">Status</div>
                                     <span
-                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.status]}`}
+                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.status] || 'bg-gray-100 text-gray-800'}`}
                                     >
                                       {order.status}
                                     </span>
@@ -487,7 +513,7 @@ const OrdersPage = () => {
                                   <div>
                                     <div className="text-xs text-muted-foreground font-medium">Payment</div>
                                     <span
-                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.payment_status]}`}
+                                      className={`inline-flex px-3 py-1 text-xs font-medium rounded-full ${statusStyles[order.payment_status] || 'bg-gray-100 text-gray-800'}`}
                                     >
                                       {order.payment_status}
                                     </span>
@@ -545,72 +571,38 @@ const OrdersPage = () => {
                     >
                       <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    {totalPages <= 5 ? (
-                      Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <Button
-                          key={page}
-                          variant={currentPage === page ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => handlePageChange(page)}
-                          disabled={loading}
-                          className={currentPage === page ? 'bg-primary text-secondary' : 'hover:bg-primary/10'}
-                          aria-label={`Page ${page}`}
-                        >
-                          {page}
-                        </Button>
-                      ))
-                    ) : (
-                      <>
-                        <Button
-                          variant={currentPage === 1 ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => handlePageChange(1)}
-                          disabled={loading}
-                          className={currentPage === 1 ? 'bg-primary text-secondary' : 'hover:bg-primary/10'}
-                          aria-label="Page 1"
-                        >
-                          1
-                        </Button>
-                        {currentPage > 3 && <span className="px-2 text-muted-foreground">...</span>}
-                        {Array.from({ length: Math.min(3, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (currentPage <= 2) {
-                            pageNum = i + 2;
-                          } else if (currentPage >= totalPages - 1) {
-                            pageNum = totalPages - 3 + i;
-                          } else {
-                            pageNum = currentPage - 1 + i;
-                          }
-                          if (pageNum > 1 && pageNum < totalPages) {
-                            return (
-                              <Button
-                                key={pageNum}
-                                variant={currentPage === pageNum ? 'default' : 'outline'}
-                                size="sm"
-                                onClick={() => handlePageChange(pageNum)}
-                                disabled={loading}
-                                className={currentPage === pageNum ? 'bg-primary text-secondary' : 'hover:bg-primary/10'}
-                                aria-label={`Page ${pageNum}`}
-                              >
-                                {pageNum}
-                              </Button>
-                            );
-                          }
-                          return null;
-                        }).filter(Boolean)}
-                        {currentPage < totalPages - 2 && <span className="px-2 text-muted-foreground">...</span>}
-                        <Button
-                          variant={currentPage === totalPages ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => handlePageChange(totalPages)}
-                          disabled={loading}
-                          className={currentPage === totalPages ? 'bg-primary text-secondary' : 'hover:bg-primary/10'}
-                          aria-label={`Page ${totalPages}`}
-                        >
-                          {totalPages}
-                        </Button>
-                      </>
-                    )}
+                    {/* Render page numbers dynamically */}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                      // Logic to display a limited number of page buttons (e.g., 1, 2, ..., last)
+                      // This aims to prevent too many page buttons from cluttering the UI
+                      if (
+                        page === 1 ||
+                        page === totalPages ||
+                        (page >= currentPage - 1 && page <= currentPage + 1)
+                      ) {
+                        return (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => handlePageChange(page)}
+                            disabled={loading}
+                            className={currentPage === page ? 'bg-primary text-primary-foreground' : 'hover:bg-primary/10'} // Changed text-secondary to text-primary-foreground for button style consistency
+                            aria-label={`Page ${page}`}
+                          >
+                            {page}
+                          </Button>
+                        );
+                      }
+                      // Display ellipsis for skipped pages
+                      if (
+                        (page === currentPage - 2 && currentPage > 3) ||
+                        (page === currentPage + 2 && currentPage < totalPages - 2)
+                      ) {
+                        return <span key={page} className="px-2 text-muted-foreground">...</span>;
+                      }
+                      return null;
+                    })}
                     <Button
                       variant="outline"
                       size="sm"

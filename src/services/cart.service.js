@@ -1,117 +1,67 @@
 import api from './api';
 
 /**
+ * @desc    Handles API requests, data extraction, and error parsing.
+ * @param   {Promise} request - The API request promise (e.g., api.get('/cart')).
+ * @returns {Promise<Object>} The cart data from the response.
+ * @throws  {Error} A formatted error with a message from the backend.
+ */
+const handleRequest = async (request) => {
+  try {
+    const response = await request;
+    // Standardized response from our backend success utility
+    return response.data.data.cart;
+  } catch (error) {
+    // Extract the specific error message from our backend ErrorResponse middleware
+    const message = error.response?.data?.error || 'An unexpected error occurred.';
+    console.error('Cart Service Error:', message, error.response);
+    throw new Error(message);
+  }
+};
+
+/**
  * Cart service for user-facing e-commerce website
  */
 const CartService = {
   /**
    * Get cart items
-   * @returns {Promise<Object>} Cart data
    */
-  getCart: async () => {
-    try {
-      const response = await api.get('/cart');
-      console.log('getting', response.data.data)
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error fetching cart:', error);
-      throw error;
-    }
-  },
+  getCart: () => handleRequest(api.get('/cart')),
 
   /**
    * Add item to cart
-   * @param {Object} cartItem - Cart item data
-   * @param {string} cartItem.productId - Product ID
-   * @param {number} cartItem.quantity - Quantity
-   * @param {string} [cartItem.variantId] - Variant ID (if applicable)
-   * @returns {Promise<Object>} Updated cart
+   * @param {{productId: string, quantity: number, variantId?: string}} cartItem
    */
-  addToCart: async (cartItem) => {
-    try {
-      const response = await api.post('/cart', cartItem);
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error adding to cart:', error);
-      throw error;
-    }
-  },
+  addToCart: (cartItem) => handleRequest(api.post('/cart', cartItem)),
 
   /**
    * Update cart item quantity
-   * @param {string} itemId - Cart item ID
-   * @param {Object} updateData - Update data
-   * @param {number} updateData.quantity - New quantity
-   * @returns {Promise<Object>} Updated cart
+   * @param {string} itemId
+   * @param {{quantity: number}} updateData
    */
-  updateCartItem: async (itemId, updateData) => {
-    try {
-      const response = await api.put(`/cart/${itemId}`, updateData);
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error updating cart item:', error);
-      throw error;
-    }
-  },
+  updateCartItem: (itemId, updateData) => handleRequest(api.put(`/cart/${itemId}`, updateData)),
 
   /**
    * Remove item from cart
-   * @param {string} itemId - Cart item ID
-   * @returns {Promise<Object>} Updated cart
+   * @param {string} itemId
    */
-  removeFromCart: async (itemId) => {
-    try {
-      const response = await api.delete(`/cart/${itemId}`);
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error removing from cart:', error);
-      throw error;
-    }
-  },
+  removeFromCart: (itemId) => handleRequest(api.delete(`/cart/${itemId}`)),
 
   /**
    * Clear cart
-   * @returns {Promise<Object>} Empty cart
    */
-  clearCart: async () => {
-    try {
-      const response = await api.delete('/cart');
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error clearing cart:', error);
-      throw error;
-    }
-  },
+  clearCart: () => handleRequest(api.delete('/cart')),
 
   /**
    * Apply coupon to cart
-   * @param {Object} couponData - Coupon data
-   * @param {string} couponData.code - Coupon code
-   * @returns {Promise<Object>} Updated cart with applied coupon
+   * @param {{code: string}} couponData
    */
-  applyCoupon: async (couponData) => {
-    try {
-      const response = await api.post('/cart/coupon', couponData);
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error applying coupon:', error);
-      throw error;
-    }
-  },
+  applyCoupon: (couponData) => handleRequest(api.post('/cart/coupon', couponData)),
 
   /**
    * Remove coupon from cart
-   * @returns {Promise<Object>} Updated cart without coupon
    */
-  removeCoupon: async () => {
-    try {
-      const response = await api.delete('/cart/coupon');
-      return response.data.data.cart;
-    } catch (error) {
-      console.error('Error removing coupon:', error);
-      throw error;
-    }
-  },
+  removeCoupon: () => handleRequest(api.delete('/cart/coupon')),
 };
 
 export default CartService;

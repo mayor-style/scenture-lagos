@@ -1,320 +1,300 @@
 // src/services/admin/product.service.js
 import api from '../api';
 
-const cache = new Map();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+// No more manual caching here; @tanstack/react-query will handle it.
 
+/**
+ * Product service for admin product and category operations
+ */
 const ProductService = {
-   getAllProducts: async (params = {}) => {
-    const cacheKey = `products_${JSON.stringify(params)}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
+    /**
+     * Get all products with pagination and filtering.
+     * @param {Object} params - Query parameters for filtering and pagination
+     * @returns {Promise<Object>} - { data: Array<Product>, total: number }
+     */
+    getAllProducts: async (params = {}) => {
+        try {
+            const response = await api.get('/admin/products', { params });
+            // Backend now directly returns formatted items and total,
+            // so we just pass it through.
+            return {
+                data: response.data?.data || [],
+                total: response.data?.pagination?.total || 0,
+            };
+        } catch (error) {
+            console.error(`Error fetching products: ${error.response?.data?.message || error.message}`);
+            // Re-throw to be caught by useQuery's error handling
+            throw new Error(error.response?.data?.message || 'Failed to fetch products');
+        }
+    },
 
-    try {
-      const response = await api.get('/admin/products', { params });
-      const { data } = response.data || { data: [] };
-      const total = response.data.pagination.total || 0;
-      const result = {
-        data: data.map(product => ({
-          id: product.id,
-          name: product.name || '',
-          sku: product.sku || '',
-          price: product.price || 0,
-          stock: product.stock || 0,
-          categoryName: product.categoryName || 'Uncategorized',
-          stockStatus: product.stock === 0 ? 'Out of Stock' : product.stock < 10 ? 'Low Stock' : 'Active',
-          status: product.status || 'published',
-          images: product.images.map(img => ({
-            url: img.url,
-            _id: img._id,
-            isMain: img.isMain || false,
-            public_id: img.public_id || '', // Include public_id
-          })) || [],
-          variants: product.variants || [],
-        })),
-        total,
-      };
-      cache.set(cacheKey, { data: result, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching products: ${error.response?.data?.error || error.message}`);
-      const defaultData = { data: [], total: 0 };
-      cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
-      return defaultData;
-    }
-  },
-
-  getProduct: async (id) => {
-    const cacheKey = `product_${id}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get(`/admin/products/${id}`);
-      console.log('🔥🔥🔥', response.data);
-      const product = response.data.data.product || {};
-      const result = {
-        product: {
-          _id: product._id || id,
-          name: product.name || '',
-          sku: product.sku || '',
-          price: product.price || 0,
-          stock: product.stock || 0,
-          status: product.status || 'published',
-          category: product.category || '',
-          categoryId: product.categoryId || '',
-          description: product.description || '',
-          scent_notes: product.scent_notes || [],
-          ingredients: product.ingredients || '',
-          variants: product.variants || [],
-          images: product.images.map(img => ({
-            url: img.url,
-            _id: img._id,
-            isMain: img.isMain || false,
-            public_id: img.public_id || '', // Include public_id
-          })) || [],
-        },
-      };
-      cache.set(cacheKey, { data: result, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching product: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to fetch product');
-    }
-  },
-
-  getAllCategories: async (params = {}) => {
-    const cacheKey = `categories_${JSON.stringify(params)}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get('/admin/categories', { params });
-      const { data, pagination } = response.data || { data: [], pagination: 0 };
-      const result = {
-        data: data.map(category => ({
-          id: category._id,
-          name: category.name || 'Uncategorized',
-          description:category.description || 'None',
-          slug:category.slug,
-          parent:category.parent,
-          parentName: category.parentName,
-          featured:category.featured,
-          productCount:category.productCount,
-          subcategoryCount:category.subcategoryCount
-        })),
-        total: pagination.total || 0,
-      };
-      cache.set(cacheKey, { data: result, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching categories: ${error.response?.data?.message || error.message}`);
-      const defaultData = { data: [], total: 0 };
-      cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
-      return defaultData;
-    }
-  },
-
-  getCategoryTree: async () => {
-    const cacheKey = 'categoryTree';
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get('/admin/categories', { params: { tree: true } });
-      const categories = response.data?.data?.categories || [];
-      const result = { data: categories };
-      cache.set(cacheKey, { data: result, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching category tree: ${error.response?.data?.message || error.message}`);
-      const defaultData = { data: [] };
-      cache.set(cacheKey, { data: defaultData, timestamp: Date.now() });
-      return defaultData;
-    }
-  },
-
-  getCategory: async (id) => {
-    const cacheKey = `category_${id}`;
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-
-    try {
-      const response = await api.get(`/admin/categories/${id}`);
-      const result = response.data || {};
-      cache.set(cacheKey, { data: result, timestamp: Date.now() });
-      return result;
-    } catch (error) {
-      console.error(`Error fetching category: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to fetch category');
-    }
-  },
-
-  createProduct: async (productData) => {
-    try {
-      const response = await api.post('/admin/products', productData);
-      cache.clear(); // Clear cache to force refresh after create
-      return response.data;
-    } catch (error) {
-      console.error(`Error creating product: ${error.response?.data?.error || error.message}`);
-      throw new Error(error.response?.data?.error || 'Failed to create product');
-    }
-  },
-
-  updateProduct: async (id, productData) => {
-    try {
-      const response = await api.put(`/admin/products/${id}`, productData);
-      cache.clear(); // Clear cache to force refresh after update
-      return response.data;
-    } catch (error) {
-      console.error(`Error updating product: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to update product');
-    }
-  },
-
-  deleteProduct: async (id) => {
-    try {
-      const response = await api.delete(`/admin/products/${id}`);
-      cache.clear(); // Clear cache to force refresh after delete
-      return response.data;
-    } catch (error) {
-      console.error(`Error deleting product: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to delete product');
-    }
-  },
-
-  uploadProductImages: async (productId, formData, onUploadProgress) => {
-    try {
-      const response = await api.post(`/admin/products/${productId}/images`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        onUploadProgress,
-      });
-      cache.clear(); // Clear cache to force refresh after image upload
-      return {
-        ...response.data,
-        product: {
-          ...response.data.data.product,
-          images: response.data.data.product.images.map(img => ({
-            url: img.url,
-            _id: img._id,
-            isMain: img.isMain || false,
-            public_id: img.public_id || '', // Include public_id
-          })),
-        },
-      };
-    } catch (error) {
-      console.error(`Error uploading product images: ${error.response?.data?.error || error.message}`);
-      throw new Error(error.response?.data?.error || 'Failed to upload images');
-    }
-  },
-
-  deleteProductImage: async (productId, imageId) => {
-    try {
-      const response = await api.delete(`/admin/products/${productId}/images/${imageId}`);
-      cache.clear(); // Clear cache to force refresh after image delete
-      return response.data;
-    } catch (error) {
-      console.error(`Error deleting product image: ${error.response?.data?.message || error.message}`);
-      throw new Error(error.response?.data?.message || 'Failed to delete image');
-    }
-  },
-
- setMainProductImage: async (productId, imageId) => {
+/**
+ * Get a single product by ID.
+ * @param {string} id - Product ID
+ * @returns {Promise<Object>} - Product data
+ */
+getProduct: async (id) => {
   try {
-    const response = await api.put(`/admin/products/${productId}/images/${imageId}/main`);
-    cache.clear(); // Clear cache to force refresh after setting main image
-    return {
-      ...response.data,
-      product: {
-        ...response.data.data.product,
-        images: response.data.data.product.images.map(img => ({
-          url: img.url,
-          _id: img._id,
-          isMain: img.isMain || false,
-          public_id: img.public_id || '', // Include public_id
-        })),
+    const response = await api.get(`/admin/products/${id}`);
+    console.log('Raw API Response:', response); // Debug: Log the full response
+    // Handle various response structures
+    const product = response.data?.data?.product || response.data?.product || response.data || {};
+    
+    // Normalize data structure
+    const normalizedProduct = {
+      id: product.id || product._id || '',
+      name: product.name || '',
+      sku: product.sku || '',
+      price: product.price || 0,
+      stock: product.stock || 0,
+      status: product.status || 'published',
+      category: typeof product.category === 'object' ? product.category : { _id: product.category || 'all', name: product.categoryName || '' },
+      description: product.description || '',
+      scentNotes: {
+        top: product.scentNotes?.top || [],
+        middle: product.scentNotes?.middle || [],
+        base: product.scentNotes?.base || [],
       },
+      ingredients: Array.isArray(product.ingredients) ? product.ingredients : [],
+      variants: product.variants || [],
+      images: product.images || [],
     };
+    
+    console.log('Normalized Product:', normalizedProduct); // Debug: Log normalized data
+    return normalizedProduct;
   } catch (error) {
-    console.error(`Error setting main product image: ${error.response?.data?.message || error.message}`);
-    throw new Error(error.response?.data?.message || 'Failed to set main image');
+    console.error('Error in getProduct:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
+    throw new Error(error.response?.data?.message || 'Failed to fetch product');
   }
 },
+    /**
+     * Get all categories with pagination.
+     * @param {Object} params - Query parameters
+     * @returns {Promise<Object>} - { data: Array<Category>, total: number }
+     */
+    getAllCategories: async (params = {}) => {
+        try {
+            const response = await api.get('/admin/categories', { params });
+            // Backend now returns data and pagination directly.
+            return {
+                data: response.data?.data || [],
+                total: response.data?.pagination?.total || 0,
+            };
+        } catch (error) {
+            console.error(`Error fetching categories: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to fetch categories');
+        }
+    },
 
-  createCategory: async (categoryData) => {
-    try {
-      const response = await api.post('/admin/categories', categoryData);
-      cache.clear(); // Clear cache to force refresh after category create
-      return response.data;
-    } catch (error) {
-      console.error(`Error creating category: ${error.response?.status || error.message}`);
-      throw error;
-    }
-  },
+    /**
+     * Get category tree.
+     * @returns {Promise<Object>} - { data: Array<CategoryTree> }
+     */
+    getCategoryTree: async () => {
+        try {
+            const response = await api.get('/admin/categories', { params: { tree: true } });
+            // Backend returns data.categories for tree, or empty array.
+            return { data: response.data?.data?.categories || [] };
+        } catch (error) {
+            console.error(`Error fetching category tree: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to fetch category tree');
+        }
+    },
 
-  updateCategory: async (id, categoryData) => {
-    try {
-      const response = await api.put(`/admin/categories/${id}`, categoryData);
-      cache.clear(); // Clear cache to force refresh after category update
-      return response.data;
-    } catch (error) {
-      console.error(`Error updating category: ${error.response?.status || error.message}`);
-      throw error;
-    }
-  },
+    /**
+     * Get a single category by ID.
+     * @param {string} id - Category ID
+     * @returns {Promise<Object>} - Category data
+     */
+    getCategory: async (id) => {
+        try {
+            const response = await api.get(`/admin/categories/${id}`);
+            return response.data; // Assuming backend returns { success, message, data: category }
+        } catch (error) {
+            console.error(`Error fetching category: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to fetch category');
+        }
+    },
 
-  deleteCategory: async (id) => {
-    try {
-      const response = await api.delete(`/admin/categories/${id}`);
-      cache.clear(); // Clear cache to force refresh after category delete
-      return response.data;
-    } catch (error) {
-      console.error(`Error deleting category: ${error.response?.status || error.message}`);
-      throw error;
-    }
-  },
+    /**
+     * Create a new product.
+     * @param {Object} productData - Product data
+     * @returns {Promise<Object>} - Created product data
+     */
+    createProduct: async (productData) => {
+        try {
+            const response = await api.post('/admin/products', productData);
+            return response.data;
+        } catch (error) {
+            console.error(`Error creating product: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to create product');
+        }
+    },
 
-  generateSKU: async (categoryId) => {
-    try {
-      const response = await api.get('/admin/products/sku', { params: { categoryId } });
-      return response.data;
-    } catch (error) {
-      console.error(`Error generating SKU: ${error.response?.data?.error || error.message}`);
-      throw new Error(error.response?.data?.error || 'Failed to generate SKU');
-    }
-  },
+    /**
+     * Update an existing product.
+     * @param {string} id - Product ID
+     * @param {Object} productData - Updated product data
+     * @returns {Promise<Object>} - Updated product data
+     */
+    updateProduct: async (id, productData) => {
+        try {
+            const response = await api.put(`/admin/products/${id}`, productData);
+            return response.data;
+        } catch (error) {
+            console.error(`Error updating product: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to update product');
+        }
+    },
 
-  generateVariantSKU: async (productSKU, size) => {
-    try {
-      const response = await api.post('/admin/products/variant-sku', { productSKU, size });
-      return response.data.sku;
-    } catch (error) {
-      console.error(`Error generating variant SKU: ${error.response?.data?.error || error.message}`);
-      throw new Error(error.response?.data?.error || 'Failed to generate variant SKU');
-    }
-  },
+    /**
+     * Delete a product.
+     * @param {string} id - Product ID
+     * @returns {Promise<Object>} - API response
+     */
+    deleteProduct: async (id) => {
+        try {
+            const response = await api.delete(`/admin/products/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error deleting product: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to delete product');
+        }
+    },
 
-  getCachedData: (cacheKey) => {
-    const cached = cache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-    return null;
-  },
+    /**
+     * Upload images for a product.
+     * @param {string} productId - Product ID
+     * @param {FormData} formData - FormData containing images
+     * @param {Function} onUploadProgress - Progress callback
+     * @returns {Promise<Object>} - Updated product data with new images
+     */
+    uploadProductImages: async (productId, formData, onUploadProgress) => {
+        try {
+            const response = await api.post(`/admin/products/${productId}/images`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+                onUploadProgress,
+            });
+            // Backend now returns the full updated product, so we just return it.
+            return response.data;
+        } catch (error) {
+            console.error(`Error uploading product images: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to upload images');
+        }
+    },
 
-  clearCache: () => {
-    cache.clear();
-  },
+    /**
+     * Delete a product image.
+     * @param {string} productId - Product ID
+     * @param {string} imageId - Image ID to delete
+     * @returns {Promise<Object>} - Updated product data
+     */
+    deleteProductImage: async (productId, imageId) => {
+        try {
+            const response = await api.delete(`/admin/products/${productId}/images/${imageId}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error deleting product image: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to delete image');
+        }
+    },
+
+    /**
+     * Set a product image as the main image.
+     * @param {string} productId - Product ID
+     * @param {string} imageId - Image ID to set as main
+     * @returns {Promise<Object>} - Updated product data
+     */
+    setMainProductImage: async (productId, imageId) => {
+        try {
+            const response = await api.put(`/admin/products/${productId}/images/${imageId}/main`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error setting main product image: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to set main image');
+        }
+    },
+
+    /**
+     * Create a new category.
+     * @param {Object} categoryData - Category data
+     * @returns {Promise<Object>} - Created category data
+     */
+    createCategory: async (categoryData) => {
+        try {
+            const response = await api.post('/admin/categories', categoryData);
+            return response.data;
+        } catch (error) {
+            console.error(`Error creating category: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to create category');
+        }
+    },
+
+    /**
+     * Update an existing category.
+     * @param {string} id - Category ID
+     * @param {Object} categoryData - Updated category data
+     * @returns {Promise<Object>} - Updated category data
+     */
+    updateCategory: async (id, categoryData) => {
+        try {
+            const response = await api.put(`/admin/categories/${id}`, categoryData);
+            return response.data;
+        } catch (error) {
+            console.error(`Error updating category: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to update category');
+        }
+    },
+
+    /**
+     * Delete a category.
+     * @param {string} id - Category ID
+     * @returns {Promise<Object>} - API response
+     */
+    deleteCategory: async (id) => {
+        try {
+            const response = await api.delete(`/admin/categories/${id}`);
+            return response.data;
+        } catch (error) {
+            console.error(`Error deleting category: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to delete category');
+        }
+    },
+
+    /**
+     * Generate a new SKU for a product.
+     * @param {string} categoryId - Category ID for SKU generation
+     * @returns {Promise<Object>} - { sku: string }
+     */
+    generateSKU: async (categoryId) => {
+        try {
+            const response = await api.get('/admin/products/sku', { params: { categoryId } });
+            return response.data; // Returns { success, message, data: { sku: '...' } }
+        } catch (error) {
+            console.error(`Error generating SKU: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to generate SKU');
+        }
+    },
+
+    /**
+     * Generate a new variant SKU.
+     * @param {string} productSKU - The base product SKU
+     * @param {string} size - The variant size
+     * @returns {Promise<string>} - The generated variant SKU string
+     */
+    generateVariantSKU: async (productSKU, size) => {
+        try {
+            const response = await api.post('/admin/products/variant-sku', { productSKU, size });
+            return response.data.data.sku; // Backend returns { success, message, data: { sku: '...' } }
+        } catch (error) {
+            console.error(`Error generating variant SKU: ${error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.message || 'Failed to generate variant SKU');
+        }
+    },
 };
 
 export default ProductService;
