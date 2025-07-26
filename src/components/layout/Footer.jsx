@@ -118,9 +118,14 @@ export default function Footer() {
             <p className="text-sm text-neutral-500 text-center sm:text-left">
               © {currentYear} Scenture Lagos. All Rights Reserved.
             </p>
-            <p className="text-sm text-neutral-500">
-              Handcrafted with ❤️ in Lagos, Nigeria.
-            </p>
+            <div className="flex items-center gap-4">
+              <p className="text-sm text-neutral-500">
+                Handcrafted with ❤️ in Lagos, Nigeria.
+              </p>
+              <Link to="/admin/login" className="text-sm text-neutral-500 hover:text-neutral-900 transition-colors">
+                Admin Login
+              </Link>
+            </div>
           </div>
         </div>
       </div>
