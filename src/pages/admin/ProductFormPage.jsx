@@ -66,40 +66,36 @@ const ProductFormPage = () => {
     queryKey: ['product', id],
     queryFn: () => ProductService.getProduct(id),
     enabled: !!id,
-    onSuccess: (data) => {
-      // Debugging: Log the received data
-      console.log('Product Query onSuccess:', data);
-      setFormData({
-        name: data.name || '',
-        sku: data.sku || '',
-        price: data.price || '',
-        stock: data.stock || '',
-        status: data.status || 'published',
-        category: data.category?.name || '',
-        categoryId: data.category?._id || 'all',
-        description: data.description || '',
-        scent_notes: [
-          ...(data.scentNotes?.top || []),
-          ...(data.scentNotes?.middle || []),
-          ...(data.scentNotes?.base || []),
-        ],
-        ingredients: Array.isArray(data.ingredients) ? data.ingredients.join(', ') : data.ingredients || '',
-        variants: data.variants || [],
-        images: data.images || [],
-      });
-    },
-    onError: (err) => {
-      console.error('Product Query Error:', err);
-      addToast(`Failed to load product: ${err.message}`, 'error');
-    },
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });
 
-  // Debugging: Log formData changes
-  useEffect(() => {
-    console.log('formData Updated:', formData);
-  }, [formData]);
+useEffect(() => {
+  if (productData) {
+    console.log('Hydrating form with productData:', productData); // For your confirmation
+    setFormData({
+      name: productData.name || '',
+      sku: productData.sku || '',
+      price: productData.price || '',
+      stock: productData.stock || '',
+      status: productData.status || 'published',
+      // Note: useQuery will give you the normalized category object from your service
+      category: productData.category?.name ||  productData.category?._id || '', 
+      categoryId: productData.category?._id || 'all',
+      description: productData.description || '',
+      // Combine all scent notes into one array for the form state
+      scent_notes: [
+        ...(productData.scentNotes?.top || []),
+        ...(productData.scentNotes?.middle || []),
+        ...(productData.scentNotes?.base || []),
+      ],
+      ingredients: Array.isArray(productData.ingredients) ? productData.ingredients.join(', ') : '',
+      variants: productData.variants || [],
+      images: productData.images || [],
+    });
+  }
+}, [productData]); // This effect runs only when `productData` changes
+
 
   // --- React Query for Categories ---
   const {
@@ -967,7 +963,7 @@ const ProductFormPage = () => {
                                 >
                                   <td className="p-3 pl-0 text-secondary">{variant.size}</td>
                                   <td className="p-3 text-secondary">{variant.sku}</td>
-                                  <td className="p-3 text-secondary">{formatPrice(variant.price)}</td>
+                                  <td className="p-3 text-secondary">{formatPrice(variant.priceAdjustment + formData.price)}</td>
                                   <td className="p-3 text-secondary">{variant.stockQuantity}</td>
                                   <td className="p-3 text-secondary">{variant.scentIntensity}</td>
                                   {!isViewMode && (

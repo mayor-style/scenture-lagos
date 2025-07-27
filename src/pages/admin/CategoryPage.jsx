@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { LoadingOverlay } from '../../components/ui/LoadingState';
 import ErrorState from '../../components/ui/ErrorState';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import CategoryTree from '../../components/admin/CategoryTree';
 
 const containerVariants = {
@@ -34,35 +35,26 @@ const rowVariants = {
 };
 
 const CategoryPage = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { addToast } = useToast();
-  const { needsRefresh, setNeedsRefresh } = useRefresh();
+ const navigate = useNavigate();
+    const location = useLocation();
+    const { addToast } = useToast();
+    const queryClient = useQueryClient(); // Get the query client instance
 
-  const queryParams = new URLSearchParams(location.search);
-  const initialPage = parseInt(queryParams.get('page') || '1');
-  const initialLimit = parseInt(queryParams.get('limit') || '10');
-  const initialSearch = queryParams.get('search') || '';
-  const initialParent = queryParams.get('parent') || 'all';
-  const initialFeatured = queryParams.get('featured') || 'all';
-  const initialView = queryParams.get('view') || 'list';
-
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState(initialSearch);
-  const [parentFilter, setParentFilter] = useState(initialParent);
-  const [featuredFilter, setFeaturedFilter] = useState(initialFeatured);
-  const [page, setPage] = useState(initialPage);
-  const [limit, setLimit] = useState(initialLimit);
-  const [total, setTotal] = useState(0);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [categoryToDelete, setCategoryToDelete] = useState(null);
-  const [viewMode, setViewMode] = useState(initialView);
+    // --- State for Filters and UI ---
+    // These states are for user interaction, not for storing server data
+    const queryParams = new URLSearchParams(location.search);
+    const [page, setPage] = useState(parseInt(queryParams.get('page') || '1'));
+    const [limit, setLimit] = useState(parseInt(queryParams.get('limit') || '10'));
+    const [searchTerm, setSearchTerm] = useState(queryParams.get('search') || '');
+    const [parentFilter, setParentFilter] = useState(queryParams.get('parent') || 'all');
+    const [featuredFilter, setFeaturedFilter] = useState(queryParams.get('featured') || 'all');
+    const [viewMode, setViewMode] = useState(queryParams.get('view') || 'list');
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [categoryToDelete, setCategoryToDelete] = useState(null);
 
   useEffect(() => {
     const newQueryParams = new URLSearchParams();
-    if (page !== 1) newQueryParams.set('page', page.toString());
+    if (page > 1) newQueryParams.set('page', page.toString());
     if (limit !== 10) newQueryParams.set('limit', limit.toString());
     if (searchTerm) newQueryParams.set('search', searchTerm);
     if (parentFilter !== 'all') newQueryParams.set('parent', parentFilter);
@@ -73,70 +65,52 @@ const CategoryPage = () => {
     navigate(newUrl, { replace: true });
   }, [page, limit, searchTerm, parentFilter, featuredFilter, viewMode, navigate, location.pathname]);
 
-  const fetchCategories = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = {
-        page,
-        limit,
-        search: searchTerm,
-        parent: parentFilter === 'all' ? undefined : parentFilter,
-        featured: featuredFilter === 'all' ? undefined : featuredFilter,
-      };
-      const response = await ProductService.getAllCategories(params);
-      setCategories(response.data);
-      setTotal(response.total || response.data.length);
-    } catch (err) {
-      setError(err.message || 'Failed to fetch categories');
-      addToast(err.message || 'Failed to fetch categories', 'error');
-      setCategories([]);
-      setTotal(0);
-    } finally {
-      setLoading(false);
-    }
-  };
+   // --- 1. Replace manual fetching with useQuery ---
+    const queryKey = ['categories', { page, limit, searchTerm, parentFilter, featuredFilter }];
+    
+    const { 
+        data: categoriesData, 
+        isLoading, 
+        isError, 
+        error 
+    } = useQuery({
+        queryKey: queryKey,
+        queryFn: () => ProductService.getAllCategories({
+            page,
+            limit,
+            search: searchTerm,
+            parent: parentFilter === 'all' ? undefined : parentFilter,
+            featured: featuredFilter === 'all' ? undefined : featuredFilter,
+        }),
+        placeholderData: (previousData) => previousData, // Keeps old data while new is fetching for smoother UX
+    });
 
-  useEffect(() => {
-    const checkCache = async () => {
-      const params = {
-        page,
-        limit,
-        search: searchTerm,
-        parent: parentFilter === 'all' ? undefined : parentFilter,
-        featured: featuredFilter === 'all' ? undefined : featuredFilter,
-      };
-      const cacheKey = `categories_${JSON.stringify(params)}`;
-      const cachedData = ProductService.getCachedData(cacheKey);
+    // Derive values from useQuery's return
+    const categories = categoriesData?.data || [];
+    const total = categoriesData?.total || 0;
 
-      if (needsRefresh || !cachedData) {
-        ProductService.clearCache();
-        await fetchCategories();
-        setNeedsRefresh(false);
-      } else {
-        setCategories(cachedData.data);
-        setTotal(cachedData.total);
-        setLoading(false);
-      }
+    // --- 2. Replace manual delete with useMutation ---
+    const deleteCategoryMutation = useMutation({
+        mutationFn: ProductService.deleteCategory,
+        onSuccess: () => {
+            addToast('Category deleted successfully', 'success');
+            // Invalidate the 'categories' query to trigger an automatic refetch
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+        },
+        onError: (err) => {
+            addToast(err.response?.data?.message || 'Failed to delete category', 'error');
+        },
+        onSettled: () => {
+            setDeleteModalOpen(false);
+            setCategoryToDelete(null);
+        }
+    });
+
+    const handleDeleteCategory = () => {
+        if (categoryToDelete) {
+            deleteCategoryMutation.mutate(categoryToDelete._id); // Pass the ID to the mutation
+        }
     };
-    checkCache();
-  }, [page, limit, searchTerm, parentFilter, featuredFilter, needsRefresh]);
-
-  const handleDeleteCategory = async () => {
-    if (!categoryToDelete) return;
-    try {
-      await ProductService.deleteCategory(categoryToDelete.id);
-      addToast('Category deleted successfully', 'success');
-      ProductService.clearCache();
-      setNeedsRefresh(true);
-      await fetchCategories();
-    } catch (err) {
-      addToast(err.response?.data?.message || 'Failed to delete category', 'error');
-    } finally {
-      setDeleteModalOpen(false);
-      setCategoryToDelete(null);
-    }
-  };
 
   const openDeleteModal = (category) => {
     setCategoryToDelete(category);
@@ -216,11 +190,11 @@ const CategoryPage = () => {
                 await fetchCategories();
                 addToast('Categories refreshed', 'success');
               }}
-              disabled={loading}
+              disabled={isLoading}
               className="hover:bg-primary/10"
               aria-label="Refresh categories"
             >
-              {loading ? (
+              {isLoading ? (
                 <>
                   <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                   Refreshing...
@@ -347,7 +321,7 @@ const CategoryPage = () => {
             <motion.div variants={cardVariants}>
               <Card className="border-primary/20 bg-background shadow-sm">
                 <CardContent className="p-0">
-                  <LoadingOverlay loading={loading}>
+                  <LoadingOverlay isLoading={isLoading}>
                     {error ? (
                       <ErrorState
                         message={error}
@@ -572,7 +546,7 @@ const CategoryPage = () => {
             </motion.div>
 
             {/* Pagination */}
-            {!loading && !error && categories.length > 0 && (
+            {!isLoading && !error && categories.length > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -705,7 +679,7 @@ const CategoryPage = () => {
                       Refresh Tree
                     </Button>
                   </div>
-                  <LoadingOverlay loading={loading}>
+                  <LoadingOverlay isLoading={isLoading}>
                     <CategoryTree />
                   </LoadingOverlay>
                 </CardContent>

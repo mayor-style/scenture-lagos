@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { ToastProvider } from './components/ui/Toast';
@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './com
 import { Button } from './components/ui/Button';
 import { AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import ProductService from './services/admin/product.service';
 
 // Lazy-loaded components for performance
 const HomePage = lazy(() => import('./pages/HomePage'));
@@ -157,13 +158,21 @@ class ErrorBoundary extends React.Component {
 }
 
 const App = () => {
+    useEffect(() => {
+    // Prefetch the featured products as soon as the app shell loads
+    queryClient.prefetchQuery({
+      queryKey: ['featuredProducts'],
+      queryFn: () => ProductService.getFeaturedProducts(4),
+    });
+  }, [queryClient]);
+
   return (
     <HelmetProvider>
        <QueryClientProvider client={queryClient}>
       <Router>
         <ScrollToTop />
         <ErrorBoundary>
-          <ToastProvider>
+          <ToastProvider duration={3000}>
             <AuthProvider>
               <CartProvider>
                 <RefreshProvider>

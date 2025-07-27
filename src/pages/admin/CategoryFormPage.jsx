@@ -13,7 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useToast } from '../../components/ui/Toast';
-import { useRefresh } from '../../contexts/RefreshContext';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ProductService from '../../services/admin/product.service';
 import DashboardService from '../../services/admin/dashboard.service';
 import { Button } from '../../components/ui/Button';
@@ -41,90 +41,106 @@ const fieldVariants = {
 };
 
 const CategoryFormPage = () => {
-  const { id, action } = useParams();
-  const navigate = useNavigate();
-  const { addToast } = useToast();
-  const { needsRefresh, setNeedsRefresh } = useRefresh();
-  const isViewMode = action === 'view';
-  const isEditMode = action === 'edit' || (id && !action);
-  const isNewMode = !id && !action;
+ const { id, action } = useParams();
+    const navigate = useNavigate();
+    const queryClient = useQueryClient(); // Get the query client instance
+    const { addToast } = useToast();
 
-  const [category, setCategory] = useState({
-    name: '',
-    description: '',
-    parent: 'none',
-    featured: false,
-  });
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(isEditMode || isViewMode);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(null);
-  const [validationErrors, setValidationErrors] = useState({});
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [imageLoading, setImageLoading] = useState(false);
+    const isViewMode = action === 'view';
+    const isEditMode = !!id && (action === 'edit' || !action);
+    const isNewMode = !id;
+
+    // Local state for the form itself
+    const [category, setCategory] = useState({
+        name: '',
+        description: '',
+        parent: 'none',
+        featured: false,
+    });
+    const [imageFile, setImageFile] = useState(null);
+    const [imagePreview, setImagePreview] = useState(null);
+    const [validationErrors, setValidationErrors] = useState({});
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+      const [isDragging, setIsDragging] = useState(false);
+
+  const [imageLoading, setImageLoading] = useState(false);
 
   const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if ((isEditMode || isViewMode) && (!id || !isValidObjectId(id))) {
-        addToast('Invalid category ID', 'error');
-        navigate('/admin/categories', { replace: true });
-        return;
-      }
+  // --- Data Fetching with React Query ---
 
-      setLoading(true);
-      setError(null);
-      try {
-        const cacheKey = `categories_${JSON.stringify({})}`;
-        const cachedCategories = ProductService.getCachedData(cacheKey);
-        if (cachedCategories && !needsRefresh) {
-          setCategories(cachedCategories.data);
-        } else {
-          const categoriesResponse = await ProductService.getAllCategories();
-          setCategories(categoriesResponse.data || []);
-        }
+    // 1. Fetch the list of all categories for the "Parent" dropdown
+    const { data: categories = [], isLoading: isLoadingCategories } = useQuery({
+        queryKey: ['categories'],
+        queryFn: ProductService.getAllCategories,
+        select: (response) => response.data
+    });
 
-        if (id && (isEditMode || isViewMode)) {
-          const categoryCacheKey = `category_${id}`;
-          const cachedCategory = ProductService.getCachedData(categoryCacheKey);
-          if (cachedCategory && !needsRefresh) {
+    // 2. Fetch the specific category data only when in edit or view mode
+    const { data: fetchedCategoryData, isLoading: isLoadingCategory, isError, error } = useQuery({
+        queryKey: ['category', id],
+        queryFn: () => ProductService.getCategory(id),
+        // Only run this query if there's an ID
+        enabled: !!id,
+        // Optional: prevent retries on 404 not found errors
+        retry: (failureCount, error) => error.status !== 404,
+    });
+    
+
+     // --- Side Effect to Populate Form ---
+    // This effect runs when the fetched data is available, populating the form state.
+    useEffect(() => {
+        if (fetchedCategoryData) {
+            const { category: data, image } = fetchedCategoryData.data;
             setCategory({
-              name: cachedCategory.data.category.name || '',
-              description: cachedCategory.data.category.description || '',
-              parent: cachedCategory.data.category.parent || 'none',
-              featured: cachedCategory.data.category.featured || false,
+                name: data.name || '',
+                description: data.description || '',
+                // Ensure parent is correctly handled if it's null or undefined
+                parent: data.parent?._id || data.parent || 'none',
+                featured: data.featured || false,
             });
-            if (cachedCategory.data.image) {
-              setImagePreview(cachedCategory.data.image);
+            if (image) {
+                setImagePreview(image);
             }
-          } else {
-            const categoryResponse = await ProductService.getCategory(id);
-            const categoryData = categoryResponse.data;
-            setCategory({
-              name: categoryData.category.name || '',
-              description: categoryData.category.description || '',
-              parent: categoryData.category.parent || 'none',
-              featured: categoryData.category.featured || false,
-            });
-            if (categoryData.image) {
-              setImagePreview(categoryData.image);
-            }
-          }
+            
         }
-      } catch (err) {
-        setError(err.response?.data?.message || 'Failed to fetch data');
-        addToast(err.response?.data?.message || 'Failed to fetch data', 'error');
-      } finally {
-        setLoading(false);
-      }
-    };
+    }, [fetchedCategoryData]);
 
-    fetchData();
-  }, [id, isEditMode, isViewMode, needsRefresh, navigate, addToast]);
+    // --- Mutations for CUD operations ---
+
+    const mutation = useMutation({
+        mutationFn: (formData) =>
+            isEditMode
+                ? ProductService.updateCategory(id, formData)
+                : ProductService.createCategory(formData),
+        onSuccess: () => {
+            addToast(`Category ${isEditMode ? 'updated' : 'created'} successfully!`, 'success');
+            // Invalidate queries to refetch fresh data
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+            queryClient.invalidateQueries({ queryKey: ['category', id] });
+            navigate('/admin/categories');
+        },
+        onError: (err) => {
+            if (err.response?.data?.errors) {
+                setValidationErrors(err.response.data.errors);
+            }
+            addToast(err.message || 'Failed to save category', 'error');
+        },
+    });
+
+    const deleteMutation = useMutation({
+        mutationFn: () => ProductService.deleteCategory(id),
+        onSuccess: () => {
+            addToast('Category deleted successfully!', 'success');
+            queryClient.invalidateQueries({ queryKey: ['categories'] });
+            navigate('/admin/categories');
+        },
+        onError: (err) => {
+            addToast(err.message || 'Failed to delete category', 'error');
+            setDeleteModalOpen(false);
+        },
+    });
+
 
   const handleInputChange = (name, value) => {
     if (isViewMode) return;
@@ -139,7 +155,7 @@ const CategoryFormPage = () => {
       }));
     }
   };
-
+console.log('carte', categories)
   const compressImage = async (file) => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -260,63 +276,34 @@ const CategoryFormPage = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (isViewMode) return;
-    if (!validateForm()) return;
+const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (isViewMode || !validateForm()) return;
 
-    setSaving(true);
-    try {
-      const formData = new FormData();
-      formData.append('name', category.name);
-      formData.append('description', category.description);
-      if (category.parent !== 'none') {
-        formData.append('parent', category.parent);
-      }
-      formData.append('featured', category.featured);
-      if (imageFile) {
-        formData.append('image', imageFile);
-      }
+        const formData = new FormData();
+        formData.append('name', category.name);
+        formData.append('description', category.description);
+        if (category.parent !== 'none') {
+            formData.append('parent', category.parent);
+        }
+        formData.append('featured', String(category.featured)); // Send as string
+        if (imageFile) {
+            formData.append('image', imageFile);
+        }
 
-      if (isEditMode) {
-        await ProductService.updateCategory(id, formData);
-        addToast('Category updated successfully', 'success');
-      } else {
-        await ProductService.createCategory(formData);
-        addToast('Category created successfully', 'success');
-      }
+        mutation.mutate(formData);
+    };
+    
+    const handleDelete = () => {
+        deleteMutation.mutate();
+    };
 
-      ProductService.clearCache();
-      DashboardService.clearCache();
-      setNeedsRefresh(true);
-      navigate('/admin/categories');
-    } catch (err) {
-      if (err.response?.data?.errors) {
-        setValidationErrors(err.response.data.errors);
-      }
-      addToast(err.response?.data?.message || 'Failed to save category', 'error');
-    } finally {
-      setSaving(false);
+    // --- Loading and Error State Handling ---
+    const isLoading = isLoadingCategories || (isEditMode && isLoadingCategory) || mutation.isPending || deleteMutation.isPending;
+
+    if (isEditMode && isError) {
+        return <ErrorState message={error.message || "Failed to load category data."} onRetry={() => queryClient.refetchQueries({ queryKey: ['category', id] })} />;
     }
-  };
-
-  const handleDelete = async () => {
-    if (isViewMode) return;
-    setSaving(true);
-    try {
-      await ProductService.deleteCategory(id);
-      addToast('Category deleted successfully', 'success');
-      ProductService.clearCache();
-      DashboardService.clearCache();
-      setNeedsRefresh(true);
-      navigate('/admin/categories');
-    } catch (err) {
-      addToast(err.response?.data?.message || 'Failed to delete category', 'error');
-    } finally {
-      setSaving(false);
-      setDeleteModalOpen(false);
-    }
-  };
 
   const getPageTitle = () => {
     if (isViewMode) return 'View Category';
@@ -391,7 +378,7 @@ const CategoryFormPage = () => {
           </div>
         </motion.header>
 
-        <LoadingOverlay loading={loading}>
+        <LoadingOverlay loading={isLoading}>
           {error ? (
             <motion.div variants={cardVariants}>
               <ErrorState
@@ -465,8 +452,7 @@ const CategoryFormPage = () => {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">None (Top Level Category)</SelectItem>
-                                {categories
-                                  .filter((cat) => cat._id !== id)
+                                {categories.filter((cat) => cat._id !== id)
                                   .map((cat) => (
                                     <SelectItem key={cat._id} value={cat._id}>
                                       {cat.name}
@@ -605,10 +591,10 @@ const CategoryFormPage = () => {
                         variant="default"
                         size="sm"
                         className="w-full sm:w-auto bg-primary hover:bg-primary-dark"
-                        disabled={saving}
+                        disabled={mutation.isPending}
                         aria-label={isEditMode ? 'Update category' : 'Create category'}
                       >
-                        {saving ? (
+                        {mutation.isPending ? (
                           <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                             Saving...

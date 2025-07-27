@@ -1,60 +1,56 @@
+// src/components/admin/CategoryTree.jsx (Refactored)
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query'; // Import useQuery
 import { ChevronRight, ChevronDown, FolderTree, Edit, Eye, Plus } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { LoadingState } from '../ui/LoadingState';
+import { LoadingState } from '../ui/LoadingState'; // You used LoadingState in your import
 import ErrorState from '../ui/ErrorState';
 import ProductService from '../../services/admin/product.service';
 
 const CategoryTree = ({ onSelectCategory, selectedCategoryId, showActions = true }) => {
-  const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [expandedNodes, setExpandedNodes] = useState({});
+    // UI state for expanded nodes remains
+    const [expandedNodes, setExpandedNodes] = useState({});
 
-  useEffect(() => {
-    const fetchCategoryTree = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await ProductService.getCategoryTree();
-        console.log('API Response:', response); // Log for debugging
-        const data = Array.isArray(response.data) ? response.data : [];
-        setCategories(data);
+    // --- 1. Fetch data with useQuery ---
+    const { 
+        data: categoryTreeResponse, 
+        isLoading, 
+        isError, 
+        error 
+    } = useQuery({
+        queryKey: ['categoryTree'],
+        queryFn: () => ProductService.getCategoryTree(),
+    });
 
-        // Auto-expand all nodes initially
-        const expanded = {};
-        const expandAll = (nodes) => {
-          if (!Array.isArray(nodes)) {
-            console.error('Expected an array for nodes, got:', nodes);
-            return;
-          }
-          nodes.forEach(node => {
-            expanded[node._id] = true;
-            if (node.children && node.children.length > 0) {
-              expandAll(node.children);
-            }
-          });
-        };
-        expandAll(data);
-        setExpandedNodes(expanded);
-      } catch (err) {
-        console.error('Error fetching category tree:', err);
-        setError(err.message || 'Failed to fetch category tree');
-      } finally {
-        setLoading(false);
-      }
+    // The service already returns { data: [...] }, so we access it here
+    const categories = categoryTreeResponse?.data || [];
+
+    // --- 2. Use a separate useEffect to handle logic after data is fetched ---
+    useEffect(() => {
+        // Only run this if we have categories to process
+        if (categories.length > 0) {
+            const expanded = {};
+            const expandAll = (nodes) => {
+                nodes.forEach(node => {
+                    expanded[node._id] = true;
+                    if (node.children && node.children.length > 0) {
+                        expandAll(node.children);
+                    }
+                });
+            };
+            expandAll(categories);
+            setExpandedNodes(expanded);
+        }
+    }, [categories]); // This effect now correctly depends on the fetched data
+
+    const toggleNode = (nodeId) => {
+        setExpandedNodes(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
     };
 
-    fetchCategoryTree();
-  }, []);
-
-  const toggleNode = (nodeId) => {
-    setExpandedNodes(prev => ({
-      ...prev,
-      [nodeId]: !prev[nodeId]
-    }));
-  };
+    // --- 3. Use isLoading and isError from useQuery for rendering ---
+    if (isLoading) return <LoadingState message="Loading category tree..." className="py-8" />;
+    if (isError) return <ErrorState message={error.message} className="py-8" />;
 
   const renderCategoryNode = (category, level = 0) => {
     const hasChildren = category.children && category.children.length > 0;
@@ -118,7 +114,7 @@ const CategoryTree = ({ onSelectCategory, selectedCategoryId, showActions = true
     );
   };
 
-  if (loading) return <LoadingState message="Loading category tree..." className="py-8" />;
+  if (isLoading) return <LoadingState message="Loading category tree..." className="py-8" />;
   if (error) return <ErrorState message={error} className="py-8" />;
   if (categories.length === 0) {
     return (
