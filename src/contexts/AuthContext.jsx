@@ -1,261 +1,204 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../components/ui/Toast';
 import AuthService from '../services/auth.service';
 
 // Create context
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
 /**
  * AuthProvider component to manage authentication state
  */
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
-  const {addToast} = useToast();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true); // Primarily for the initial user load
+  const { addToast } = useToast();
   const navigate = useNavigate();
 
-  // Load user on mount
+  // Helper function to clear session data from state and localStorage
+  const clearSession = useCallback(() => {
+    setCurrentUser(null);
+    localStorage.removeItem('token');
+  }, []);
+
+  // Load user on initial mount
   useEffect(() => {
     const loadUser = async () => {
-      try {
-        // Only attempt to load user if we have a token
-        if (AuthService.isAuthenticated()) {
-          setLoading(true);
+      const token = localStorage.getItem('token');
+      if (token) {
+        try {
+          // No need to set loading to true here, it's true by default
           const { data } = await AuthService.getCurrentUser();
           setCurrentUser(data);
+        } catch (err) {
+          console.error('Failed to load user with token:', err);
+          // If token is invalid or expired, clear it
+          clearSession();
         }
-      } catch (err) {
-        console.error('Failed to load user:', err);
-        // Clear auth state if token is invalid
-        localStorage.removeItem('token');
-        localStorage.removeItem('isAuthenticated');
-        localStorage.removeItem('userRole');
-      } finally {
-        setLoading(false);
       }
+      setLoading(false);
     };
 
     loadUser();
-  }, []);
+  }, [clearSession]);
+
+  // Centralized function to handle successful authentication
+  const handleSuccessfulAuth = useCallback((response, isAdmin = false) => {
+    const { user, token } = response.data;
+    
+    // Set state and persist token
+    setCurrentUser(response.data);
+    localStorage.setItem('token', token);
+
+    // Redirect based on role
+    const effectiveRole = user.role;
+    const redirectPath = effectiveRole === 'admin' || effectiveRole === 'superadmin' ? '/admin/dashboard' : '/';
+    navigate(redirectPath);
+
+    addToast('Login successful!', 'success');
+  }, [navigate, addToast]);
+
 
   /**
-   * Login a regular user
+   * Login a user (regular or admin)
    * @param {Object} credentials - User credentials
+   * @param {boolean} isAdminLogin - Flag to distinguish between admin/regular login
    */
-  const login = async (credentials) => {
+  const login = useCallback(async (credentials, isAdminLogin = false) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      const response = await AuthService.login(credentials);
-      setCurrentUser(response.data);
-      addToast('Login successful', 'success');
+      const response = isAdminLogin 
+        ? await AuthService.adminLogin(credentials) 
+        : await AuthService.login(credentials);
+      
+      handleSuccessfulAuth(response, isAdminLogin);
       return response;
     } catch (err) {
-      setError(err.response?.data?.message || 'Login failed');
-      throw err;
+      addToast(err.response?.data?.message || 'Login failed', 'error');
+      throw err; // Re-throw for local handling in components
     } finally {
       setLoading(false);
     }
-  };
-
-  /**
-   * Login an admin user
-   * @param {Object} credentials - Admin credentials
-   */
-  const adminLogin = async (credentials) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await AuthService.adminLogin(credentials);
-       setCurrentUser(response.data);
-      addToast('Admin login successful', 'success');
-      return response;
-    } catch (err) {
-      setError(err.response?.data?.message || 'Admin login failed');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-useEffect(()=>{
+  }, [handleSuccessfulAuth, addToast]);
   
-}, [adminLogin])
-
   /**
    * Logout the current user
    */
-  const logout = async () => {
+  const logout = useCallback(async () => {
+    const wasAdmin = currentUser?.user?.role === 'admin' || currentUser?.user?.role === 'superadmin';
     try {
-      setLoading(true);
-      await AuthService.logout();
-      setCurrentUser(null);
+      // Optimistically clear client state
+      clearSession();
       addToast('Logged out successfully', 'success');
+      navigate(wasAdmin ? '/admin/login' : '/login');
       
-      // Redirect based on user role
-      const userRole = localStorage.getItem('userRole');
-      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
-      navigate(isAdmin ? '/admin/login' : '/login');
+      // Attempt to invalidate token on the server
+      await AuthService.logout();
     } catch (err) {
-      console.error('Logout error:', err);
-      // Still clear user state even if API call fails
-      setCurrentUser(null);
-      
-      // Redirect based on user role
-      const userRole = localStorage.getItem('userRole');
-      const isAdmin = userRole === 'admin' || userRole === 'superadmin';
-      navigate(isAdmin ? '/admin/login' : '/login');
-    } finally {
-      setLoading(false);
+      console.error('Logout API call failed:', err);
+      // Client state is already cleared, navigation is done.
+      // No need for further action here.
     }
-  };
-
-  /**
-   * Update user details
-   * @param {Object} userData - User data to update
-   */
-  const updateUserDetails = async (userData) => {
-    try {
-      setLoading(true);
-      const response = await AuthService.updateDetails(userData);
-      setCurrentUser(response.data);
-      addToast('Profile updated successfully', 'success');
-      return response;
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update profile');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Update user password
-   * @param {Object} passwordData - Password data
-   */
-  const updatePassword = async (passwordData) => {
-    try {
-      setLoading(true);
-      const response = await AuthService.updatePassword(passwordData);
-      addToast('Password updated successfully', 'success');
-      return response;
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update password');
-      throw err;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Check if user has required role
-  const hasRole = (requiredRoles) => {
-    if (!currentUser) return false;
-    
-    if (Array.isArray(requiredRoles)) {
-      return requiredRoles.includes(currentUser.user.role);
-    }
-    
-    return requiredRoles === currentUser.user.role;
-  };
+  }, [clearSession, navigate, addToast, currentUser]);
 
   /**
    * Register a new user
    * @param {Object} userData - User registration data
    */
-  const register = async (userData) => {
+  const register = useCallback(async (userData) => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
       const response = await AuthService.register(userData);
-      setCurrentUser(response.data);
+      // Assuming registration logs the user in
+      handleSuccessfulAuth(response); 
       addToast('Registration successful', 'success');
       return response;
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      addToast(err.response?.data?.message || 'Registration failed', 'error');
       throw err;
     } finally {
       setLoading(false);
     }
-  };
+  }, [handleSuccessfulAuth, addToast]);
 
-  /**
-   * Request password reset
-   * @param {Object} email - User email
-   */
-  const forgotPassword = async (email) => {
+
+  // --- Other Methods (Update Profile, Password, etc.) ---
+
+  const updateUserDetails = useCallback(async (userData) => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await AuthService.forgotPassword(email);
-      addToast('Password reset email sent', 'success');
+      const response = await AuthService.updateDetails(userData);
+      setCurrentUser(prevUser => ({...prevUser, user: response.data.user }));
+      addToast('Profile updated successfully', 'success');
       return response;
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to send reset email');
+      addToast(err.response?.data?.message || 'Failed to update profile', 'error');
       throw err;
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [addToast]);
 
-  /**
-   * Verify reset token
-   * @param {string} token - Reset token
-   */
-  const verifyResetToken = async (token) => {
+  const updatePassword = useCallback(async (passwordData) => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await AuthService.verifyResetToken(token);
+      const response = await AuthService.updatePassword(passwordData);
+      addToast('Password updated successfully', 'success');
       return response;
     } catch (err) {
-      setError(err.response?.data?.message || 'Invalid or expired token');
+      addToast(err.response?.data?.message || 'Failed to update password', 'error');
       throw err;
-    } finally {
-      setLoading(false);
     }
-  };
-
-  /**
-   * Reset password with token
-   * @param {Object} data - Reset password data
-   * @param {string} data.token - Reset token
-   * @param {string} data.password - New password
-   */
-  const resetPassword = async (data) => {
+  }, [addToast]);
+  
+  const forgotPassword = useCallback(async (email) => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await AuthService.resetPassword(data);
-      addToast('Password reset successful', 'success');
-      return response;
+        const response = await AuthService.forgotPassword(email);
+        addToast('Password reset email sent', 'success');
+        return response;
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to reset password');
-      throw err;
-    } finally {
-      setLoading(false);
+        addToast(err.response?.data?.message || 'Failed to send reset email', 'error');
+        throw err;
     }
-  };
+  }, [addToast]);
+  
+  const resetPassword = useCallback(async (data) => {
+    try {
+        const response = await AuthService.resetPassword(data);
+        addToast('Password reset successful', 'success');
+        navigate('/login'); // Navigate to login after successful reset
+        return response;
+    } catch (err) {
+        addToast(err.response?.data?.message || 'Failed to reset password', 'error');
+        throw err;
+    }
+  }, [addToast, navigate]);
 
-  // Context value
-  const value = {
+  // Check if user has one of the required roles
+  const hasRole = useCallback((requiredRoles) => {
+    if (!currentUser) return false;
+    const userRole = currentUser.user.role;
+    return Array.isArray(requiredRoles) 
+      ? requiredRoles.includes(userRole) 
+      : requiredRoles === userRole;
+  }, [currentUser]);
+
+  // Memoize the context value to prevent unnecessary re-renders of consumers
+  const value = useMemo(() => ({
     currentUser,
     loading,
-    error,
     login,
-    adminLogin,
     logout,
-    updateDetails: updateUserDetails,
-    updatePassword,
     register,
+    updateUserDetails,
+    updatePassword,
     forgotPassword,
-    verifyResetToken,
     resetPassword,
     isAuthenticated: !!currentUser,
-    hasRole
-  };
+    hasRole,
+  }), [currentUser, loading, login, logout, register, updateUserDetails, updatePassword, forgotPassword, resetPassword, hasRole]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 };
 
 /**
@@ -263,7 +206,7 @@ useEffect(()=>{
  */
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === null) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

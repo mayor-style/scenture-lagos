@@ -128,7 +128,9 @@ getProduct: async (id) => {
     createProduct: async (productData) => {
         try {
             const response = await api.post('/admin/products', productData);
+            console.log('Create Product Response:', response.data); // Debug: Log the response
             return response.data;
+
         } catch (error) {
             console.error(`Error creating product: ${error.response?.data?.message || error.message}`);
             throw new Error(error.response?.data?.message || 'Failed to create product');
@@ -174,6 +176,7 @@ getProduct: async (id) => {
      * @returns {Promise<Object>} - Updated product data with new images
      */
     uploadProductImages: async (productId, formData, onUploadProgress) => {
+        console.log('Uploading images for product:', productId);
         try {
             const response = await api.post(`/admin/products/${productId}/images`, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
@@ -182,8 +185,8 @@ getProduct: async (id) => {
             // Backend now returns the full updated product, so we just return it.
             return response.data;
         } catch (error) {
-            console.error(`Error uploading product images: ${error.response?.data?.message || error.message}`);
-            throw new Error(error.response?.data?.message || 'Failed to upload images');
+            console.error(`Error uploading product images: ${error.response?.data?.error || error.response?.data?.message || error.message}`);
+            throw new Error(error.response?.data?.error || 'Failed to upload images');
         }
     },
 

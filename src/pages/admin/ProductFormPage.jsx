@@ -116,26 +116,24 @@ useEffect(() => {
   const categories = categoriesData?.data || [];
   const loading = isCreateMode ? false : productLoading || categoriesLoading;
 
-  // Debugging: Log loading state
-  useEffect(() => {
-    console.log('Loading State:', { loading, productLoading, categoriesLoading });
-  }, [loading, productLoading, categoriesLoading]);
 
   // --- Mutations ---
   const createProductMutation = useMutation({
     mutationFn: ProductService.createProduct,
     onSuccess: async (response) => {
+      console.log('Create Product Response:', response);
       addToast('Product created successfully', 'success');
       if (imageFiles.length > 0) {
         const formData = new FormData();
         imageFiles.forEach((file) => formData.append('images', file));
-        await uploadProductImagesMutation.mutateAsync({ productId: response.data.data.product._id, formData });
+       await uploadProductImagesMutation.mutateAsync({ productId: response.data?.product?._id, formData });
       }
       queryClient.invalidateQueries(['products']);
-      queryClient.invalidateQueries(['product', response.data.data.product._id]);
+      queryClient.invalidateQueries(['product', response.data?.product._id]);
       navigate('/admin/products');
     },
     onError: (err) => {
+      console.error('Create Product Error:', err);
       addToast(`Failed to create product: ${err.message}`, 'error');
     },
   });

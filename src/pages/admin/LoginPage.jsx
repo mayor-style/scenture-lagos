@@ -5,11 +5,12 @@ import { Button } from '../../components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '../../components/ui/Card';
 import { Lock, User, LogIn } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { is } from 'date-fns/locale';
 
 const AdminLoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { adminLogin, loading, error: authError } = useAuth();
+  const { login, loading, error: authError } = useAuth();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -26,16 +27,19 @@ const AdminLoginPage = () => {
     }));
   };
 
+  const isAdminLogin = true; // Flag to indicate admin login
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     try {
-      // Call the adminLogin function from AuthContext
-      await adminLogin({
+      const credentials = {
         email: formData.email,
-        password: formData.password
-      });
+        password: formData.password,
+        rememberMe: formData.rememberMe,
+      };
+      // Call the adminLogin function from AuthContext
+      await login(credentials, isAdminLogin);
       
       // Redirect to the intended page or dashboard
       const redirectTo = location.state?.from?.pathname || '/admin/dashboard';

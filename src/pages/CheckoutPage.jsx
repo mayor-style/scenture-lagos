@@ -213,6 +213,7 @@ useEffect(() => {
         shippingRateId: selectedShippingMethod,
       };
 
+      console.log('Creating order with data:', orderData);
       const { order: createdOrder } = await OrderService.createOrder(orderData);
       
       if (!createdOrder) throw new Error('Failed to create order. Please try again.');
