@@ -1190,15 +1190,27 @@ useEffect(() => {
                         className="w-full bg-primary hover:bg-primary-dark"
                         disabled={createProductMutation.isLoading || updateProductMutation.isLoading}
                       >
-                        {(createProductMutation.isLoading || updateProductMutation.isLoading) ? (
+                        {isEditMode ? (
+                          updateProductMutation.isLoading ? (
+                            <>
+                              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                              Updating...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="mr-2 h-4 w-4" />
+                              Update Product
+                            </>
+                          )
+                        ) : createProductMutation.isLoading ? (
                           <>
                             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                            {isEditMode ? 'Updating...' : 'Creating...'}
+                            Creating...
                           </>
                         ) : (
                           <>
                             <Save className="mr-2 h-4 w-4" />
-                            {isEditMode ? 'Update Product' : 'Create Product'}
+                            Create Product
                           </>
                         )}
                       </Button>
