@@ -180,7 +180,7 @@ const AboutPage = () => {
           <h2 className="text-3xl lg:text-4xl font-extrabold text-white tracking-tight">Experience the Scenture Difference</h2>
           <p className="mt-4 text-slate-300 leading-relaxed">Transform your space into a sanctuary of luxury and distinction. Discover a fragrance that tells your story.</p>
           <Button asChild size="lg" className="mt-8 group">
-            <Link to="/shop">
+            <Link to="/shop" className="flex justify-center items-center">
               Shop The Collection
               <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
             </Link>

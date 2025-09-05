@@ -99,7 +99,7 @@ const OrderSummary = React.memo(({ cart }) => {
       </div>
       <div className="p-6 bg-slate-50/50 rounded-b-3xl">
         <Button asChild size="lg" className="w-full text-base rounded-2xl">
-          <Link to="/checkout">
+          <Link to="/checkout" className="flex justify-center items-center">
             Proceed to Checkout <ArrowRight size={20} className="ml-2" />
           </Link>
         </Button>
@@ -118,7 +118,7 @@ const EmptyCart = () => (
         <h2 className="font-heading text-3xl text-slate-800">Your cart is empty</h2>
         <p className="text-slate-500 max-w-sm">Looks like you haven't added anything to your cart yet. Explore our collections to find something you'll love.</p>
         <Button asChild size="lg" className="rounded-full">
-            <Link to="/shop">
+            <Link to="/shop" className="flex justify-center items-center">
               Start Shopping <ArrowRight size={18} className="ml-2" />
             </Link>
         </Button>
