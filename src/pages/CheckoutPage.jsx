@@ -253,8 +253,14 @@ useEffect(() => {
       setFormStep('Confirmation');
       addToast('Payment successful! Your order has been confirmed.', 'success');
     } catch (error) {
-      addToast(error.message || 'Payment verification failed. Please contact support.', 'error');
-      navigate('/orders'); // Navigate to user's order history on failure
+       // 1. Show a specific error message.
+      addToast(error.message || 'Payment failed. Please try again or use a different method.', 'error');
+      
+      // 2. Return the user to the payment step to try again seamlessly.
+      setFormStep('Payment');
+
+      // 3. Clean the URL to remove the failed payment reference.
+      navigate(location.pathname, { replace: true });
     }
   };
 
