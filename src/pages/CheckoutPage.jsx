@@ -431,7 +431,7 @@ const CheckoutPage = () => {
   return (
     <div className="bg-gray-50/30 min-h-screen py-8 sm:py-12"> {/* _RESPONSIVE-UPDATE_: Responsive padding */}
       <div className="container max-w-7xl px-4"> {/* _RESPONSIVE-UPDATE_: Added horizontal padding */}
-        <CheckoutProgress step={formStep} setStep={setStep} />
+        <CheckoutProgress step={formStep} setStep={setFormStep} />
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
            <main className={`lg:col-span-3 ${formStep === 'Confirmation' && 'lg:col-span-5'} bg-white rounded-2xl shadow-sm border border-gray-100/50 p-4 sm:p-6`}> {/* _RESPONSIVE-UPDATE_: Responsive padding */}
               <AnimatePresence mode="wait">
