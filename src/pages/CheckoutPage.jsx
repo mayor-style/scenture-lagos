@@ -106,13 +106,19 @@ const CheckoutPage = () => {
 
 // Redirect if cart is empty, but NOT if we are confirming or verifying an order
 useEffect(() => {
-  // Only check if the cart is empty during the initial checkout stages.
-  const isFinalStep = formStep === 'Confirmation' || formStep === 'Verifying';
+     // Check if a payment verification is in progress by looking for 'reference' in the URL.
+    const query = new URLSearchParams(location.search);
+    const isVerifyingPayment = query.has('reference');
 
-  if (!isFinalStep && !isCartLoading && (!cart || cart.items.length === 0)) {
-    addToast('Your cart is empty. Please add items before checkout.', 'warning');
-    navigate('/cart');
-  }
+    // The checkout process is complete or in verification stages.
+    const isFinalStep = formStep === 'Confirmation' || formStep === 'Verifying';
+
+    // **CRITICAL FIX**: Do NOT redirect to cart if we are in a final step OR if we are
+    // currently verifying a payment (even if the cart is empty).
+    if (!isFinalStep && !isVerifyingPayment && !isCartLoading && (!cart || cart.items.length === 0)) {
+        addToast('Your cart is empty. Please add items before checkout.', 'warning');
+        navigate('/cart');
+    }
 }, [isCartLoading, cart, navigate, addToast, formStep]);
 
   // Fetch shipping and payment methods
